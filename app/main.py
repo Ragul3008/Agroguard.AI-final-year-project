@@ -23,6 +23,7 @@ from app.database.db import create_tables
 from app.models.model_loader import ModelLoader
 from app.api.health import router as health_router
 from app.api.routes import router as predict_router
+from app.api.speech import router as speech_router        # ← NEW
 from app.utils.logger import get_logger
 
 logger   = get_logger(__name__)
@@ -89,10 +90,11 @@ def create_app() -> FastAPI:
             "AI-powered banana crop disease detection API.\n\n"
             "Detects: Panama Disease, Black Sigatoka, Yellow Sigatoka, "
             "Pseudostem Weevil, Bunchy Top Virus (BBTV), and Anthracnose.\n\n"
-            "Provides ICAR-aligned treatment advisories and locates the nearest "
-            "banana farming support centre."
+            "Provides ICAR-aligned treatment advisories, locates the nearest "
+            "banana farming support centre, and supports multilingual "
+            "speech-to-text for farmers to describe problems in their native language."
         ),
-        version="1.0.0",
+        version="1.1.0",
         lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc",
@@ -110,6 +112,7 @@ def create_app() -> FastAPI:
     # ── Routers ────────────────────────────────────────────────────────────
     app.include_router(health_router)
     app.include_router(predict_router)
+    app.include_router(speech_router)        # ← NEW: Speech-to-Text endpoints
 
     return app
 
