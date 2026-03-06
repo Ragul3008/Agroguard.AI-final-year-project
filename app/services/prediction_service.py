@@ -1,15 +1,11 @@
 """
-services/prediction_service.py - Orchestrates the full banana disease prediction pipeline.
+services/prediction_service.py - Production prediction orchestrator.
 
-8-Step Pipeline:
-    1. Validate image (GuardrailService)
-    2. Preprocess image bytes → tensor (image_preprocessing)
-    3. Classify banana disease (DiseaseClassifier)
-    4. Estimate severity (SeverityEstimator)
-    5. Generate ICAR-aligned advisory (AdvisoryService)
-    6. Resolve nearest banana farming support centre (LocationService)
-    7. Persist prediction to PostgreSQL (CRUD)
-    8. Return structured PredictResponse
+Same 8-step pipeline. Added:
+    - Uses PredictionResult (confidence checks + banana detection)
+    - Passes all production fields to DB
+    - Returns full PredictResponse with confidence_pct, is_confident,
+      is_banana_image, rejection_reason, all_probabilities
 """
 
 from datetime import datetime, timezone
@@ -32,19 +28,15 @@ logger = get_logger(__name__)
 
 
 class PredictionService:
-    """
-    High-level service that wires all domain components together
-    to deliver a complete banana crop disease prediction.
-    """
+    """Production prediction service — full 8-step pipeline."""
 
     def __init__(self) -> None:
         loader = ModelLoader.get_instance()
-
-        self._classifier        = DiseaseClassifier(model_loader=loader)
+        self._classifier         = DiseaseClassifier(model_loader=loader)
         self._severity_estimator = SeverityEstimator()
-        self._advisory_service  = AdvisoryService()
-        self._location_service  = LocationService()
-        self._guardrail_service = GuardrailService()
+        self._advisory_service   = AdvisoryService()
+        self._location_service   = LocationService()
+        self._guardrail_service  = GuardrailService()
 
     async def predict(
         self,
@@ -54,70 +46,79 @@ class PredictionService:
         longitude:    Optional[float],
         db:           AsyncSession,
     ) -> PredictResponse:
-        """
-        Execute the full 8-step prediction pipeline.
+        """Full production prediction pipeline."""
 
-        Args:
-            image_bytes:  Raw bytes of the uploaded banana plant image.
-            content_type: MIME type of the uploaded file.
-            latitude:     Optional GPS latitude of the farm.
-            longitude:    Optional GPS longitude of the farm.
-            db:           Async database session injected by FastAPI.
+        logger.info("── Prediction Pipeline START ──")
 
-        Returns:
-            PredictResponse populated with all prediction fields.
-
-        Raises:
-            ValueError:   If image validation or preprocessing fails.
-            RuntimeError: If the ML inference step fails unexpectedly.
-        """
-        logger.info("── Banana Prediction Pipeline START ──")
-
-        # ── Step 1: Validate input ─────────────────────────────────────────
+        # Step 1: Validate image
         self._guardrail_service.validate_image(content_type, len(image_bytes))
         logger.info("Step 1 ✓ Image validated")
 
-        # ── Step 2: Preprocess image ───────────────────────────────────────
+        # Step 2: Preprocess
         tensor = preprocess_image(image_bytes)
-        logger.info("Step 2 ✓ Image preprocessed → %s", tuple(tensor.shape))
+        logger.info("Step 2 ✓ Preprocessed → %s", tuple(tensor.shape))
 
-        # ── Step 3: Classify disease ───────────────────────────────────────
-        disease_name, confidence = self._classifier.predict(tensor)
-        logger.info("Step 3 ✓ Disease: '%s'  Confidence: %.4f", disease_name, confidence)
+        # Step 3: Classify (with confidence + banana checks)
+        result = self._classifier.predict(tensor)
+        logger.info("Step 3 ✓ Disease='%s' Confidence=%.4f is_confident=%s is_banana=%s",
+                    result.disease_name, result.confidence,
+                    result.is_confident, result.is_banana_image)
 
-        # ── Step 4: Estimate severity ──────────────────────────────────────
-        severity = self._severity_estimator.estimate(disease_name, confidence)
-        logger.info("Step 4 ✓ Severity: %s", severity)
+        # Step 4: Severity
+        severity = (
+            self._severity_estimator.estimate(result.disease_name, result.confidence)
+            if result.is_banana_image else "Unknown"
+        )
+        logger.info("Step 4 ✓ Severity=%s", severity)
 
-        # ── Step 5: Generate ICAR advisory ────────────────────────────────
-        advisory = self._advisory_service.get_advisory(disease_name, severity)
+        # Step 5: Advisory
+        advisory = (
+            self._advisory_service.get_advisory(result.disease_name, severity)
+            if result.is_confident
+            else (result.rejection_reason or "Please upload a clearer image.")
+        )
         logger.info("Step 5 ✓ Advisory generated (%d chars)", len(advisory))
 
-        # ── Step 6: Nearest banana support centre ─────────────────────────
+        # Step 6: Nearest centre
         nearest_center = self._location_service.get_nearest_centre(latitude, longitude)
         logger.info("Step 6 ✓ Nearest centre: %s", nearest_center)
 
-        # ── Step 7: Persist to PostgreSQL ─────────────────────────────────
+        # Format confidence percentage
+        confidence_pct = f"{result.confidence * 100:.2f}%"
+
+        # Step 7: Persist to DB
         await create_prediction(
             db=db,
-            disease=disease_name,
-            confidence=confidence,
+            disease=result.disease_name,
+            confidence=result.confidence,
+            confidence_pct=confidence_pct,
             severity=severity,
             advisory=advisory,
+            is_confident=result.is_confident,
+            is_banana_image=result.is_banana_image,
+            rejection_reason=result.rejection_reason,
             latitude=latitude,
             longitude=longitude,
+            nearest_center=nearest_center,
         )
-        logger.info("Step 7 ✓ Prediction saved to database")
+        logger.info("Step 7 ✓ Saved to database")
 
-        # ── Step 8: Build and return response ─────────────────────────────
+        # Step 8: Return full response
         response = PredictResponse(
-            disease=disease_name,
-            confidence=confidence,
+            disease=result.disease_name,
+            confidence=result.confidence,
+            confidence_pct=confidence_pct,
             severity=severity,
             advisory=advisory,
             nearest_center=nearest_center,
+            is_confident=result.is_confident,
+            is_banana_image=result.is_banana_image,
+            rejection_reason=result.rejection_reason,
+            all_probabilities=result.all_probabilities,
             timestamp=datetime.now(timezone.utc),
+            model_version="1.1.0",
         )
 
-        logger.info("── Banana Prediction Pipeline COMPLETE ──")
+        logger.info("── Prediction Pipeline COMPLETE → %s | %s | %s ──",
+                    result.disease_name, severity, confidence_pct)
         return response

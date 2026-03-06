@@ -1,11 +1,8 @@
 """
-main.py - AgroGuard-AI FastAPI application entry point (Banana Edition).
+main.py - AgroGuard-AI Production FastAPI Application v1.1.0
 
-Startup sequence:
-    1. Initialise PostgreSQL tables via SQLAlchemy.
-    2. Pre-load the ResNet-50 banana disease model into memory (singleton).
-    3. Register CORS middleware and API routers.
-    4. Serve requests via Uvicorn.
+Team: Kabilan R K | Ragul J | Sanjai J | Karthikeyan S
+Guide: Dr. G. Arulselvi — Annamalai University B.E CSE (AI & ML)
 
 Run:
     uvicorn app.main:app --reload
@@ -23,42 +20,26 @@ from app.database.db import create_tables
 from app.models.model_loader import ModelLoader
 from app.api.health import router as health_router
 from app.api.routes import router as predict_router
-from app.api.speech import router as speech_router        # ← NEW
+from app.api.speech import router as speech_router
 from app.utils.logger import get_logger
 
 logger   = get_logger(__name__)
 settings = get_settings()
 
 
-# ---------------------------------------------------------------------------
-# Lifespan context — startup / shutdown
-# ---------------------------------------------------------------------------
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """
-    Handles application startup and shutdown logic.
+    logger.info("╔══════════════════════════════════════════════╗")
+    logger.info("║  AgroGuard-AI v1.1.0 (Production) STARTING  ║")
+    logger.info("╚══════════════════════════════════════════════╝")
 
-    Startup:
-        1. Create / verify PostgreSQL tables.
-        2. Warm up the ResNet-50 banana model.
-
-    Shutdown:
-        Resources are cleaned up automatically by SQLAlchemy's NullPool.
-    """
-    logger.info("╔══════════════════════════════════════════╗")
-    logger.info("║   AgroGuard-AI (Banana Edition) STARTING ║")
-    logger.info("╚══════════════════════════════════════════╝")
-
-    # ── 1. Database initialisation ────────────────────────────────────────
     try:
         await create_tables()
         logger.info("✓ Database tables ready.")
     except Exception as exc:
-        logger.error("✗ Database initialisation failed: %s", exc)
+        logger.error("✗ Database failed: %s", exc)
         logger.warning("  Continuing without DB — predictions will not be persisted.")
 
-    # ── 2. Model warm-up ──────────────────────────────────────────────────
     try:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
@@ -68,31 +49,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("✓ Banana disease model loaded and ready.")
     except Exception as exc:
         logger.error("✗ Model loading failed: %s", exc)
-        logger.warning("  Continuing with uninitialised model — predictions will fail.")
+        logger.warning("  Continuing with uninitialised model.")
 
     logger.info("✓ AgroGuard-AI is ready to serve requests.")
 
-    yield  # ← application runs here
+    yield
 
     logger.info("AgroGuard-AI shutting down gracefully.")
 
 
-# ---------------------------------------------------------------------------
-# Application factory
-# ---------------------------------------------------------------------------
-
 def create_app() -> FastAPI:
-    """Construct and configure the FastAPI application."""
-
     app = FastAPI(
         title="AgroGuard-AI — Banana Disease Detection",
         description=(
-            "AI-powered banana crop disease detection API.\n\n"
-            "Detects: Panama Disease, Black Sigatoka, Yellow Sigatoka, "
-            "Pseudostem Weevil, Bunchy Top Virus (BBTV), and Anthracnose.\n\n"
-            "Provides ICAR-aligned treatment advisories, locates the nearest "
-            "banana farming support centre, and supports multilingual "
-            "speech-to-text for farmers to describe problems in their native language."
+            "## AI-Powered Banana Crop Disease Detection\n\n"
+            "**Annamalai University — B.E CSE (AI & ML) Final Year Project**\n\n"
+            "### Features\n"
+            "- 🍌 Detects 6 banana diseases + healthy classification\n"
+            "- 🎯 Confidence threshold filtering\n"
+            "- 🚫 Non-banana image rejection\n"
+            "- 📊 Full probability distribution for all 7 classes\n"
+            "- 📋 ICAR-aligned treatment advisories\n"
+            "- 📍 Nearest banana farming support centre\n"
+            "- 🎤 Multilingual speech-to-text (Whisper medium)\n"
+            "- 📈 Prediction history & statistics dashboard\n\n"
+            "### Team\n"
+            "Kabilan R K | Ragul J | Sanjai J | Karthikeyan S\n\n"
+            "**Guide:** Dr. G. Arulselvi"
         ),
         version="1.1.0",
         lifespan=lifespan,
@@ -100,7 +83,6 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
-    # ── CORS middleware ────────────────────────────────────────────────────
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.ALLOWED_ORIGINS,
@@ -109,13 +91,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # ── Routers ────────────────────────────────────────────────────────────
     app.include_router(health_router)
     app.include_router(predict_router)
-    app.include_router(speech_router)        # ← NEW: Speech-to-Text endpoints
+    app.include_router(speech_router)
 
     return app
 
 
-# Expose the app instance for Uvicorn
 app = create_app()

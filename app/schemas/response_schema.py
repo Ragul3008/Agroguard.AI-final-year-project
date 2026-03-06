@@ -1,5 +1,5 @@
 """
-schemas/response_schema.py - Pydantic response schemas for AgroGuard-AI.
+schemas/response_schema.py - Production response schemas for AgroGuard-AI.
 """
 
 from datetime import datetime
@@ -8,24 +8,47 @@ from pydantic import BaseModel, Field
 
 
 class PredictResponse(BaseModel):
-    """Response payload returned by POST /predict."""
+    """Full production response from POST /predict."""
 
-    disease:        str      = Field(..., description="Detected banana disease name.")
-    confidence:     float    = Field(..., ge=0.0, le=1.0, description="Model confidence score.")
-    severity:       str      = Field(..., description="Severity level: Low, Medium, High, or None.")
-    advisory:       str      = Field(..., description="ICAR-aligned treatment and management advice.")
-    nearest_center: str      = Field(..., description="Nearest banana farming support centre.")
-    timestamp:      datetime = Field(..., description="UTC timestamp of the prediction.")
+    # Core prediction
+    disease:          str   = Field(..., description="Detected banana disease name.")
+    confidence:       float = Field(..., ge=0.0, le=1.0, description="Model confidence [0-1].")
+    confidence_pct:   str   = Field(..., description="Confidence as percentage e.g. '94.23%'.")
+    severity:         str   = Field(..., description="Severity: Low, Medium, High, or None.")
 
-    model_config = {"from_attributes": True}
+    # Advisory & location
+    advisory:         str   = Field(..., description="ICAR-aligned treatment advisory.")
+    nearest_center:   str   = Field(..., description="Nearest banana farming support centre.")
+
+    # Production fields
+    is_confident:      bool             = Field(..., description="True if confidence is sufficient.")
+    is_banana_image:   bool             = Field(..., description="True if image is a banana plant.")
+    rejection_reason:  Optional[str]    = Field(None, description="Reason if prediction rejected.")
+    all_probabilities: dict[str, float] = Field(..., description="Probability for all 7 classes.")
+
+    # Metadata
+    timestamp:      datetime = Field(..., description="UTC timestamp of prediction.")
+    model_version:  str      = Field(default="1.1.0", description="Model version.")
+
+    model_config = {
+        "from_attributes": True,
+        "protected_namespaces": ()
+    }
 
 
 class HealthResponse(BaseModel):
-    """Response returned by GET /health."""
-    status: str = Field(default="ok")
+    """Response from GET /health."""
+    status:       str  = Field(default="ok")
+    version:      str  = Field(default="1.1.0")
+    model_loaded: bool = Field(default=True)
+
+    model_config = {
+        "protected_namespaces": ()
+    }
 
 
 class ErrorResponse(BaseModel):
-    """Standard error envelope for 4xx / 5xx responses."""
-    detail: str
-    code:   Optional[int] = None
+    """Standard error envelope."""
+    detail:    str
+    code:      Optional[int] = None
+    timestamp: datetime = Field(default_factory=datetime.utcnow)

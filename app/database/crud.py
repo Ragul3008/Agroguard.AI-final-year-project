@@ -1,12 +1,11 @@
 """
-database/crud.py - Async CRUD operations for AgroGuard-AI prediction records.
+database/crud.py - Production CRUD operations for AgroGuard-AI.
+Added: stats endpoint, nearest_center, is_confident, is_banana_image fields.
 """
 
 from typing import Optional
-
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.database.models import Prediction
 from app.utils.logger import get_logger
 
@@ -14,47 +13,37 @@ logger = get_logger(__name__)
 
 
 async def create_prediction(
-    db:         AsyncSession,
-    disease:    str,
-    confidence: float,
-    severity:   str,
-    advisory:   str,
-    latitude:   Optional[float],
-    longitude:  Optional[float],
+    db:              AsyncSession,
+    disease:         str,
+    confidence:      float,
+    confidence_pct:  str,
+    severity:        str,
+    advisory:        str,
+    is_confident:    bool,
+    is_banana_image: bool,
+    rejection_reason: Optional[str],
+    latitude:        Optional[float],
+    longitude:       Optional[float],
+    nearest_center:  Optional[str],
 ) -> Prediction:
-    """
-    Persist a new banana disease prediction to the database.
-
-    Args:
-        db:         Async database session.
-        disease:    Detected disease label.
-        confidence: Model confidence score [0, 1].
-        severity:   Estimated severity level.
-        advisory:   ICAR-aligned advisory text.
-        latitude:   Optional GPS latitude of the farm.
-        longitude:  Optional GPS longitude of the farm.
-
-    Returns:
-        The newly created Prediction ORM object with ``id`` populated.
-    """
+    """Save a prediction to the database."""
     prediction = Prediction(
         disease=disease,
         confidence=confidence,
+        confidence_pct=confidence_pct,
         severity=severity,
         advisory=advisory,
+        is_confident=is_confident,
+        is_banana_image=is_banana_image,
+        rejection_reason=rejection_reason,
         latitude=latitude,
         longitude=longitude,
+        nearest_center=nearest_center,
     )
     db.add(prediction)
     await db.commit()
     await db.refresh(prediction)
-
-    logger.info(
-        "Prediction saved → id=%d  disease='%s'  severity='%s'",
-        prediction.id,
-        prediction.disease,
-        prediction.severity,
-    )
+    logger.info("Prediction saved → id=%d disease='%s'", prediction.id, prediction.disease)
     return prediction
 
 
@@ -69,10 +58,32 @@ async def get_prediction_by_id(
 
 
 async def get_recent_predictions(
-    db: AsyncSession, limit: int = 100
+    db: AsyncSession, limit: int = 50
 ) -> list[Prediction]:
-    """Return the most recent predictions ordered by creation time (newest first)."""
+    """Return most recent predictions."""
     result = await db.execute(
         select(Prediction).order_by(Prediction.created_at.desc()).limit(limit)
     )
     return list(result.scalars().all())
+
+
+async def get_prediction_stats(db: AsyncSession) -> dict:
+    """Return disease statistics for dashboard."""
+    total_result = await db.execute(select(func.count(Prediction.id)))
+    total_count  = total_result.scalar()
+
+    by_disease = await db.execute(
+        select(Prediction.disease, func.count(Prediction.id))
+        .group_by(Prediction.disease)
+        .order_by(func.count(Prediction.id).desc())
+    )
+    by_severity = await db.execute(
+        select(Prediction.severity, func.count(Prediction.id))
+        .group_by(Prediction.severity)
+    )
+
+    return {
+        "total_predictions": total_count,
+        "by_disease":  {row[0]: row[1] for row in by_disease},
+        "by_severity": {row[0]: row[1] for row in by_severity},
+    }
