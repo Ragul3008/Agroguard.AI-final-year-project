@@ -4,14 +4,14 @@ models/model_loader.py - Thread-safe singleton model loader for AgroGuard-AI.
 Loads the fine-tuned ResNet-50 banana disease classifier once at startup
 and reuses the same instance for every inference request.
 
-Banana Disease Classes (7):
-    0  Banana___Panama_Disease
-    1  Banana___Black_Sigatoka
-    2  Banana___Yellow_Sigatoka
-    3  Banana___Pseudostem_Weevil
-    4  Banana___Bunchy_Top_Virus
-    5  Banana___Anthracnose
-    6  Banana___Healthy
+Banana Disease Classes (7) - Alphabetical order matching ImageFolder:
+    0  anthracnose
+    1  black sigatoka
+    2  bunchy top virus
+    3  healthy
+    4  panama
+    5  pseudostem Wevil
+    6  yellow sigatoka
 """
 
 import os
@@ -28,16 +28,16 @@ logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Banana Disease Class Labels
-# These must match the exact class order used when training the model.
+# IMPORTANT: Must match alphabetical folder order used by ImageFolder during training
 # ---------------------------------------------------------------------------
 DISEASE_CLASSES: list[str] = [
-    "Banana___Panama_Disease",       # Fusarium wilt — most destructive
-    "Banana___Black_Sigatoka",       # Mycosphaerella fijiensis fungal leaf disease
-    "Banana___Yellow_Sigatoka",      # Mycosphaerella musicola fungal leaf disease
-    "Banana___Pseudostem_Weevil",    # Odoiporus longicollis insect pest
-    "Banana___Bunchy_Top_Virus",     # BBTV — aphid-transmitted virus
-    "Banana___Anthracnose",          # Colletotrichum musae post-harvest fungal disease
-    "Banana___Healthy",              # No disease detected
+    "Banana - Anthracnose",
+    "Banana - Black Sigatoka",
+    "Banana - Bunchy Top Virus (BBTV)",
+    "Banana - Healthy",
+    "Banana - Panama Disease (Fusarium Wilt)",
+    "Banana - Pseudostem Weevil Infestation",
+    "Banana - Yellow Sigatoka",
 ]
 
 NUM_CLASSES: int = len(DISEASE_CLASSES)   # 7
@@ -83,11 +83,17 @@ class ModelLoader:
 
     def _build_architecture(self) -> nn.Module:
         """
-        Build ResNet-50 with a custom classification head for 7 banana disease classes.
+        Build ResNet-50 with custom classification head matching training architecture.
         """
         net = models.resnet50(weights=None)
-        in_features = net.fc.in_features          # 2048 for ResNet-50
-        net.fc = nn.Linear(in_features, NUM_CLASSES)
+        in_features = net.fc.in_features  # 2048 for ResNet-50
+        net.fc = nn.Sequential(
+            nn.Dropout(p=0.4),
+            nn.Linear(in_features, 512),
+            nn.ReLU(),
+            nn.Dropout(p=0.3),
+            nn.Linear(512, NUM_CLASSES)
+        )
         return net
 
     def _load_model(self) -> nn.Module:
@@ -106,12 +112,16 @@ class ModelLoader:
             )
             state = torch.load(self.model_path, map_location=self.device)
 
-            # Support both raw state-dict and {'state_dict': …} checkpoints
-            if isinstance(state, dict) and "state_dict" in state:
+            # Support checkpoint dict saved by training notebook
+            if isinstance(state, dict) and "model_state_dict" in state:
+                state = state["model_state_dict"]
+            elif isinstance(state, dict) and "state_dict" in state:
                 state = state["state_dict"]
 
             net.load_state_dict(state)
-            logger.info("Banana disease model loaded successfully (%d classes).", NUM_CLASSES)
+            logger.info(
+                "Banana disease model loaded successfully (%d classes).", NUM_CLASSES
+            )
         else:
             logger.warning(
                 "Checkpoint not found at '%s'. "

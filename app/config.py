@@ -1,6 +1,5 @@
 """
-config.py - Production configuration for AgroGuard-AI.
-All settings loaded from environment variables / .env file.
+config.py - Production configuration for AgroGuard-AI v1.2.0
 """
 
 from functools import lru_cache
@@ -15,8 +14,17 @@ class Settings(BaseSettings):
 
     # ── ML Model ───────────────────────────────────────────────────────
     MODEL_PATH: str                   = "saved_models/agroguard_banana_resnet50.pth"
-    MODEL_CONFIDENCE_THRESHOLD: float = 0.75   # Below this → uncertain prediction
-    MODEL_NOT_BANANA_THRESHOLD: float = 0.40   # Below this → not a banana image
+    MODEL_CONFIDENCE_THRESHOLD: float = 0.75
+    MODEL_NOT_BANANA_THRESHOLD: float = 0.40
+
+    # ── Gemini LLM ─────────────────────────────────────────────────────
+    GEMINI_API_KEY: str = ""
+
+    # ── Google Maps ────────────────────────────────────────────────────
+    GOOGLE_MAPS_API_KEY: str = ""
+
+    # ── JWT Authentication ─────────────────────────────────────────────
+    SECRET_KEY: str = "agroguard-secret-key-change-this-in-production"
 
     # ── Whisper ────────────────────────────────────────────────────────
     WHISPER_MODEL_SIZE: str = "medium"

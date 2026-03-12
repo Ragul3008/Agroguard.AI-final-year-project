@@ -1,21 +1,19 @@
 """
-api/routes.py - Production API endpoints for AgroGuard-AI.
-
-Endpoints:
-    POST /predict            — disease prediction
-    GET  /predictions        — prediction history
-    GET  /predictions/stats  — disease statistics
+api/routes.py - Production API endpoints with JWT + Rate Limiting.
 """
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.db import get_db
 from app.database.crud import get_recent_predictions, get_prediction_stats
+from app.database.models import Farmer
 from app.schemas.response_schema import PredictResponse
 from app.services.prediction_service import PredictionService
+from app.utils.dependencies import get_current_farmer
+from app.utils.rate_limiter import limiter
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -28,29 +26,28 @@ _prediction_service = PredictionService()
     "/predict",
     response_model=PredictResponse,
     status_code=status.HTTP_200_OK,
-    summary="Detect banana plant disease from uploaded image",
+    summary="Detect banana plant disease (Login required)",
     description=(
         "Upload a banana leaf, stem, or fruit image.\n\n"
-        "**Production features:**\n"
-        "- Confidence threshold filtering (rejects uncertain predictions)\n"
-        "- Non-banana image rejection\n"
-        "- Full probability distribution for all 7 classes\n"
-        "- ICAR-aligned treatment advisory\n"
-        "- Nearest banana farming support centre\n\n"
-        "**Diseases:** Panama Disease, Black Sigatoka, Yellow Sigatoka, "
+        "🔐 **Authentication required**\n\n"
+        "🛡️ **Rate limit:** 10 requests per minute per IP\n\n"
+        "**Diseases detected:** Panama Disease, Black Sigatoka, Yellow Sigatoka, "
         "Pseudostem Weevil, BBTV, Anthracnose, Healthy"
     ),
 )
+@limiter.limit("10/minute")
 async def predict_banana_disease(
-    image:     UploadFile        = File(..., description="Banana plant image JPEG/PNG/WebP."),
-    latitude:  Optional[float]   = Form(None, ge=-90.0,  le=90.0),
-    longitude: Optional[float]   = Form(None, ge=-180.0, le=180.0),
-    db:        AsyncSession       = Depends(get_db),
+    request:   Request,
+    image:     UploadFile      = File(..., description="Banana plant image JPEG/PNG/WebP."),
+    latitude:  Optional[float] = Form(None, ge=-90.0,  le=90.0),
+    longitude: Optional[float] = Form(None, ge=-180.0, le=180.0),
+    db:        AsyncSession    = Depends(get_db),
+    farmer:    Farmer          = Depends(get_current_farmer),
 ) -> PredictResponse:
     """Full production banana disease prediction pipeline."""
     logger.info(
-        "POST /predict | file='%s' type='%s' lat=%s lng=%s",
-        image.filename, image.content_type, latitude, longitude,
+        "POST /predict | farmer_id=%d phone='%s' file='%s' lat=%s lng=%s",
+        farmer.id, farmer.phone, image.filename, latitude, longitude,
     )
 
     image_bytes = await image.read()
@@ -62,6 +59,7 @@ async def predict_banana_disease(
             latitude=latitude,
             longitude=longitude,
             db=db,
+            farmer_id=farmer.id,
         )
     except ValueError as exc:
         logger.warning("Validation error: %s", exc)
@@ -73,10 +71,15 @@ async def predict_banana_disease(
 
 @router.get(
     "/predictions",
-    summary="Get prediction history",
-    description="Returns the 50 most recent predictions.",
+    summary="Get prediction history (Login required)",
+    description="🔐 Returns the 50 most recent predictions.",
 )
-async def get_prediction_history(db: AsyncSession = Depends(get_db)) -> list[dict]:
+@limiter.limit("30/minute")
+async def get_prediction_history(
+    request: Request,
+    db:      AsyncSession = Depends(get_db),
+    farmer:  Farmer       = Depends(get_current_farmer),
+) -> list[dict]:
     """Return recent prediction history."""
     predictions = await get_recent_predictions(db, limit=50)
     return [
@@ -96,9 +99,13 @@ async def get_prediction_history(db: AsyncSession = Depends(get_db)) -> list[dic
 
 @router.get(
     "/predictions/stats",
-    summary="Get disease statistics",
-    description="Returns disease distribution statistics for dashboard.",
+    summary="Get disease statistics (Public)",
+    description="Returns disease distribution statistics. No authentication required.",
 )
-async def get_stats(db: AsyncSession = Depends(get_db)) -> dict:
-    """Return disease statistics."""
+@limiter.limit("60/minute")
+async def get_stats(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return disease statistics — public endpoint."""
     return await get_prediction_stats(db)

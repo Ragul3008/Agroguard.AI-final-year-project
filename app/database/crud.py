@@ -1,12 +1,12 @@
 """
 database/crud.py - Production CRUD operations for AgroGuard-AI.
-Added: stats endpoint, nearest_center, is_confident, is_banana_image fields.
+Updated: farmer_id tracking added to predictions.
 """
 
 from typing import Optional
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database.models import Prediction
+from app.database.models import Prediction, Farmer
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -25,9 +25,11 @@ async def create_prediction(
     latitude:        Optional[float],
     longitude:       Optional[float],
     nearest_center:  Optional[str],
+    farmer_id:       Optional[int] = None,
 ) -> Prediction:
     """Save a prediction to the database."""
     prediction = Prediction(
+        farmer_id=farmer_id,
         disease=disease,
         confidence=confidence,
         confidence_pct=confidence_pct,
@@ -43,7 +45,8 @@ async def create_prediction(
     db.add(prediction)
     await db.commit()
     await db.refresh(prediction)
-    logger.info("Prediction saved → id=%d disease='%s'", prediction.id, prediction.disease)
+    logger.info("Prediction saved → id=%d farmer_id=%s disease='%s'",
+                prediction.id, farmer_id, prediction.disease)
     return prediction
 
 
@@ -81,9 +84,11 @@ async def get_prediction_stats(db: AsyncSession) -> dict:
         select(Prediction.severity, func.count(Prediction.id))
         .group_by(Prediction.severity)
     )
+    farmer_count = await db.execute(select(func.count(Farmer.id)))
 
     return {
         "total_predictions": total_count,
-        "by_disease":  {row[0]: row[1] for row in by_disease},
-        "by_severity": {row[0]: row[1] for row in by_severity},
+        "total_farmers":     farmer_count.scalar(),
+        "by_disease":        {row[0]: row[1] for row in by_disease},
+        "by_severity":       {row[0]: row[1] for row in by_severity},
     }

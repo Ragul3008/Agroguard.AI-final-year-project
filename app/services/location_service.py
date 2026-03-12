@@ -1,117 +1,68 @@
 """
-services/location_service.py - Location service for AgroGuard-AI (Banana Edition).
+services/location_service.py - Google Maps API location service for AgroGuard-AI.
 
-Returns the nearest ICAR / Horticulture / Agriculture help centre for banana
-farmers based on GPS coordinates.
+Architecture:
+    Primary  → Google Maps Places API (real nearby agriculture offices)
+    Fallback → Hardcoded ICAR centre coordinates (if Maps API fails)
 
-Centres are focussed on major banana-growing districts of Tamil Nadu and
-surrounding states. Replace with a live PostGIS or Google Maps API query
-in production.
+Finds the nearest banana farming / horticulture / agriculture support
+centre for the farmer based on their GPS coordinates.
 """
 
-import math
+import httpx
 from typing import Optional
 
+from app.config import get_settings
 from app.utils.logger import get_logger
 
-logger = get_logger(__name__)
+logger   = get_logger(__name__)
+settings = get_settings()
 
 # ---------------------------------------------------------------------------
-# Mock database of banana-farming support centres
-# Focused on key banana cultivation districts in Tamil Nadu & Karnataka.
+# Google Maps Places API endpoint
 # ---------------------------------------------------------------------------
-_CENTRES: list[dict] = [
-    # ── ICAR / National Research Centres ───────────────────────────────────
-    {
-        "name": "ICAR-NRCB (National Research Centre for Banana), Trichy",
-        "lat": 10.8254,
-        "lng": 78.6856,
-        "type": "ICAR Research Centre",
-    },
-    # ── Tamil Nadu Horticulture Department offices ─────────────────────────
-    {
-        "name": "Theni District Horticulture Office (Banana Hub)",
-        "lat": 10.0104,
-        "lng": 77.4770,
-        "type": "State Horticulture Office",
-    },
-    {
-        "name": "Trichy District Horticulture Office",
-        "lat": 10.7905,
-        "lng": 78.7047,
-        "type": "State Horticulture Office",
-    },
-    {
-        "name": "Erode Banana Farmers Support Centre",
-        "lat": 11.3410,
-        "lng": 77.7172,
-        "type": "Farmer Support Centre",
-    },
-    {
-        "name": "Coimbatore Agriculture and Horticulture Office",
-        "lat": 11.0168,
-        "lng": 76.9558,
-        "type": "State Agriculture Office",
-    },
-    {
-        "name": "Salem District Horticulture Office",
-        "lat": 11.6643,
-        "lng": 78.1460,
-        "type": "State Horticulture Office",
-    },
-    {
-        "name": "Dindigul District Horticulture Office",
-        "lat": 10.3673,
-        "lng": 77.9803,
-        "type": "State Horticulture Office",
-    },
-    {
-        "name": "Tirunelveli Horticulture Office",
-        "lat": 8.7139,
-        "lng": 77.7567,
-        "type": "State Horticulture Office",
-    },
-    {
-        "name": "Madurai District Agriculture Office",
-        "lat": 9.9252,
-        "lng": 78.1198,
-        "type": "State Agriculture Office",
-    },
-    {
-        "name": "Vellore District Agriculture Office",
-        "lat": 12.9165,
-        "lng": 79.1325,
-        "type": "State Agriculture Office",
-    },
-    # ── Krishi Vigyan Kendras (KVKs) ───────────────────────────────────────
-    {
-        "name": "KVK Theni — Banana Crop Advisory Centre",
-        "lat": 9.9601,
-        "lng": 77.4794,
-        "type": "Krishi Vigyan Kendra",
-    },
-    {
-        "name": "KVK Trichy — ICAR Liaison Office",
-        "lat": 10.8050,
-        "lng": 78.6930,
-        "type": "Krishi Vigyan Kendra",
-    },
-    # ── Karnataka (Cavendish-growing belt) ────────────────────────────────
-    {
-        "name": "Davangere Horticulture Department, Karnataka",
-        "lat": 14.4644,
-        "lng": 75.9218,
-        "type": "State Horticulture Office",
-    },
+_PLACES_NEARBY_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+_PLACE_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
+
+# Search keywords for agriculture offices near farmer
+_SEARCH_KEYWORDS = [
+    "horticulture office",
+    "agriculture office",
+    "krishi vigyan kendra",
+    "ICAR",
+]
+
+# Search radius in metres (50 km)
+_SEARCH_RADIUS = 50000
+
+
+# ---------------------------------------------------------------------------
+# Hardcoded fallback centres
+# ---------------------------------------------------------------------------
+import math
+
+_FALLBACK_CENTRES: list[dict] = [
+    {"name": "ICAR-NRCB (National Research Centre for Banana), Trichy",  "lat": 10.8254, "lng": 78.6856, "type": "ICAR Research Centre"},
+    {"name": "Theni District Horticulture Office (Banana Hub)",           "lat": 10.0104, "lng": 77.4770, "type": "State Horticulture Office"},
+    {"name": "Trichy District Horticulture Office",                       "lat": 10.7905, "lng": 78.7047, "type": "State Horticulture Office"},
+    {"name": "Erode Banana Farmers Support Centre",                       "lat": 11.3410, "lng": 77.7172, "type": "Farmer Support Centre"},
+    {"name": "Coimbatore Agriculture and Horticulture Office",            "lat": 11.0168, "lng": 76.9558, "type": "State Agriculture Office"},
+    {"name": "Salem District Horticulture Office",                        "lat": 11.6643, "lng": 78.1460, "type": "State Horticulture Office"},
+    {"name": "Dindigul District Horticulture Office",                     "lat": 10.3673, "lng": 77.9803, "type": "State Horticulture Office"},
+    {"name": "Tirunelveli Horticulture Office",                           "lat":  8.7139, "lng": 77.7567, "type": "State Horticulture Office"},
+    {"name": "Madurai District Agriculture Office",                       "lat":  9.9252, "lng": 78.1198, "type": "State Agriculture Office"},
+    {"name": "KVK Theni — Banana Crop Advisory Centre",                   "lat":  9.9601, "lng": 77.4794, "type": "Krishi Vigyan Kendra"},
+    {"name": "KVK Trichy — ICAR Liaison Office",                          "lat": 10.8050, "lng": 78.6930, "type": "Krishi Vigyan Kendra"},
+    {"name": "Davangere Horticulture Department, Karnataka",              "lat": 14.4644, "lng": 75.9218, "type": "State Horticulture Office"},
 ]
 
 
 def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """Calculate great-circle distance in kilometres between two GPS coordinates."""
-    R = 6371.0  # Earth's mean radius in km
+    """Calculate great-circle distance in km between two GPS coordinates."""
+    R = 6371.0
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi    = math.radians(lat2 - lat1)
-    dlambda = math.radians(lng2 - lng1)
+    dphi       = math.radians(lat2 - lat1)
+    dlambda    = math.radians(lng2 - lng1)
     a = (
         math.sin(dphi / 2) ** 2
         + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
@@ -120,7 +71,12 @@ def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 
 
 class LocationService:
-    """Returns the nearest banana farming support centre for given coordinates."""
+    """
+    Google Maps-powered location service.
+
+    Primary:  Google Maps Places API → real nearby agriculture offices
+    Fallback: Hardcoded ICAR centres → reliable static fallback
+    """
 
     def get_nearest_centre(
         self,
@@ -128,29 +84,88 @@ class LocationService:
         longitude: Optional[float],
     ) -> str:
         """
-        Find the nearest registered banana farming support centre.
+        Find nearest banana farming support centre using Google Maps API.
 
         Args:
-            latitude:  User GPS latitude (may be None if not provided).
-            longitude: User GPS longitude (may be None if not provided).
+            latitude:  Farmer's GPS latitude.
+            longitude: Farmer's GPS longitude.
 
         Returns:
-            Name of the nearest centre with its type, or a default message
-            if no coordinates were supplied.
+            Name and distance of nearest centre.
         """
         if latitude is None or longitude is None:
-            logger.info("No GPS coordinates provided — returning default centre.")
+            logger.info("No GPS coordinates — returning default ICAR-NRCB centre.")
             return (
                 "ICAR-NRCB (National Research Centre for Banana), Trichy — "
                 "Contact: 0431-2616214 | nrcb@icar.gov.in"
             )
 
+        # Try Google Maps API first
+        result = self._get_google_maps_centre(latitude, longitude)
+        if result:
+            logger.info("Google Maps centre found: %s", result)
+            return result
+
+        # Fallback to hardcoded centres
+        logger.warning("Google Maps API failed — using fallback centres.")
+        return self._get_fallback_centre(latitude, longitude)
+
+    def _get_google_maps_centre(
+        self,
+        latitude:  float,
+        longitude: float,
+    ) -> str | None:
+        """Query Google Maps Places API for nearby agriculture offices."""
+        api_key = settings.GOOGLE_MAPS_API_KEY
+
+        if not api_key:
+            logger.warning("GOOGLE_MAPS_API_KEY not set — skipping Maps API.")
+            return None
+
+        for keyword in _SEARCH_KEYWORDS:
+            try:
+                params = {
+                    "location": f"{latitude},{longitude}",
+                    "radius":   _SEARCH_RADIUS,
+                    "keyword":  keyword,
+                    "key":      api_key,
+                }
+
+                response = httpx.get(
+                    _PLACES_NEARBY_URL,
+                    params=params,
+                    timeout=5.0,
+                )
+                data = response.json()
+
+                if data.get("status") == "OK" and data.get("results"):
+                    place    = data["results"][0]
+                    name     = place.get("name", "Agriculture Office")
+                    vicinity = place.get("vicinity", "")
+
+                    # Calculate distance
+                    place_loc = place.get("geometry", {}).get("location", {})
+                    place_lat = place_loc.get("lat", latitude)
+                    place_lng = place_loc.get("lng", longitude)
+                    distance  = _haversine(latitude, longitude, place_lat, place_lng)
+
+                    result = f"{name} — {vicinity} ({distance:.1f} km away)"
+                    logger.info("Google Maps found: %s", result)
+                    return result
+
+            except Exception as exc:
+                logger.error("Google Maps API error for keyword='%s': %s", keyword, exc)
+                continue
+
+        return None
+
+    def _get_fallback_centre(self, latitude: float, longitude: float) -> str:
+        """Return nearest hardcoded ICAR centre."""
         nearest  = min(
-            _CENTRES,
+            _FALLBACK_CENTRES,
             key=lambda c: _haversine(latitude, longitude, c["lat"], c["lng"]),
         )
         distance = _haversine(latitude, longitude, nearest["lat"], nearest["lng"])
-
-        result = f"{nearest['name']} ({nearest['type']}) — {distance:.1f} km away"
-        logger.info("Nearest centre: %s", result)
+        result   = f"{nearest['name']} ({nearest['type']}) — {distance:.1f} km away"
+        logger.info("Fallback centre: %s", result)
         return result

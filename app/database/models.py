@@ -1,15 +1,45 @@
 """
 database/models.py - Production ORM models for AgroGuard-AI.
-Added: is_confident, is_banana_image, rejection_reason, nearest_center, model_version columns.
+Includes: Farmer (user) model + Prediction model.
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey
+from sqlalchemy.orm import DeclarativeBase, relationship
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class Farmer(Base):
+    """
+    Farmer user account.
+    Stores registration details and authentication credentials.
+    """
+
+    __tablename__ = "farmers"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    name         = Column(String(255), nullable=False)
+    phone        = Column(String(20),  nullable=False, unique=True, index=True)
+    email        = Column(String(255), nullable=True,  unique=True, index=True)
+    password_hash = Column(String(255), nullable=False)
+    village      = Column(String(255), nullable=True)
+    district     = Column(String(255), nullable=True)
+    state        = Column(String(255), nullable=True, default="Tamil Nadu")
+    is_active    = Column(Boolean,     nullable=False, default=True)
+    created_at   = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    # Relationship to predictions
+    predictions = relationship("Prediction", back_populates="farmer", lazy="select")
+
+    def __repr__(self) -> str:
+        return f"<Farmer id={self.id} name='{self.name}' phone='{self.phone}'>"
 
 
 class Prediction(Base):
@@ -17,7 +47,8 @@ class Prediction(Base):
 
     __tablename__ = "predictions"
 
-    id               = Column(Integer,  primary_key=True, autoincrement=True)
+    id               = Column(Integer,     primary_key=True, autoincrement=True)
+    farmer_id        = Column(Integer,     ForeignKey("farmers.id"), nullable=True)
     disease          = Column(String(255), nullable=False)
     confidence       = Column(Float,       nullable=False)
     confidence_pct   = Column(String(20),  nullable=False, default="0.00%")
@@ -35,6 +66,9 @@ class Prediction(Base):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
+
+    # Relationship to farmer
+    farmer = relationship("Farmer", back_populates="predictions")
 
     def __repr__(self) -> str:
         return (

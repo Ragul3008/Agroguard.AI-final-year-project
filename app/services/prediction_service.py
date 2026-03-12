@@ -1,11 +1,5 @@
 """
-services/prediction_service.py - Production prediction orchestrator.
-
-Same 8-step pipeline. Added:
-    - Uses PredictionResult (confidence checks + banana detection)
-    - Passes all production fields to DB
-    - Returns full PredictResponse with confidence_pct, is_confident,
-      is_banana_image, rejection_reason, all_probabilities
+services/prediction_service.py - Production prediction orchestrator with JWT farmer tracking.
 """
 
 from datetime import datetime, timezone
@@ -28,7 +22,7 @@ logger = get_logger(__name__)
 
 
 class PredictionService:
-    """Production prediction service — full 8-step pipeline."""
+    """Production prediction service — full 8-step pipeline with farmer tracking."""
 
     def __init__(self) -> None:
         loader = ModelLoader.get_instance()
@@ -45,12 +39,13 @@ class PredictionService:
         latitude:     Optional[float],
         longitude:    Optional[float],
         db:           AsyncSession,
+        farmer_id:    Optional[int] = None,
     ) -> PredictResponse:
-        """Full production prediction pipeline."""
+        """Full production prediction pipeline with farmer tracking."""
 
-        logger.info("── Prediction Pipeline START ──")
+        logger.info("── Prediction Pipeline START (farmer_id=%s) ──", farmer_id)
 
-        # Step 1: Validate image
+        # Step 1: Validate
         self._guardrail_service.validate_image(content_type, len(image_bytes))
         logger.info("Step 1 ✓ Image validated")
 
@@ -58,7 +53,7 @@ class PredictionService:
         tensor = preprocess_image(image_bytes)
         logger.info("Step 2 ✓ Preprocessed → %s", tuple(tensor.shape))
 
-        # Step 3: Classify (with confidence + banana checks)
+        # Step 3: Classify
         result = self._classifier.predict(tensor)
         logger.info("Step 3 ✓ Disease='%s' Confidence=%.4f is_confident=%s is_banana=%s",
                     result.disease_name, result.confidence,
@@ -71,7 +66,7 @@ class PredictionService:
         )
         logger.info("Step 4 ✓ Severity=%s", severity)
 
-        # Step 5: Advisory
+        # Step 5: Advisory (Gemini LLM)
         advisory = (
             self._advisory_service.get_advisory(result.disease_name, severity)
             if result.is_confident
@@ -79,16 +74,16 @@ class PredictionService:
         )
         logger.info("Step 5 ✓ Advisory generated (%d chars)", len(advisory))
 
-        # Step 6: Nearest centre
+        # Step 6: Nearest centre (Google Maps)
         nearest_center = self._location_service.get_nearest_centre(latitude, longitude)
         logger.info("Step 6 ✓ Nearest centre: %s", nearest_center)
 
-        # Format confidence percentage
         confidence_pct = f"{result.confidence * 100:.2f}%"
 
-        # Step 7: Persist to DB
+        # Step 7: Persist to DB with farmer_id
         await create_prediction(
             db=db,
+            farmer_id=farmer_id,
             disease=result.disease_name,
             confidence=result.confidence,
             confidence_pct=confidence_pct,
@@ -103,7 +98,7 @@ class PredictionService:
         )
         logger.info("Step 7 ✓ Saved to database")
 
-        # Step 8: Return full response
+        # Step 8: Return response
         response = PredictResponse(
             disease=result.disease_name,
             confidence=result.confidence,
