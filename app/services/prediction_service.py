@@ -1,12 +1,9 @@
 """
 services/prediction_service.py - Production prediction orchestrator with JWT farmer tracking.
 """
-
 from datetime import datetime, timezone
 from typing import Optional
-
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.models.model_loader import ModelLoader
 from app.models.disease_classifier import DiseaseClassifier
 from app.models.severity_estimator import SeverityEstimator
@@ -40,47 +37,59 @@ class PredictionService:
         longitude:    Optional[float],
         db:           AsyncSession,
         farmer_id:    Optional[int] = None,
+        language:     str           = "english",
     ) -> PredictResponse:
-        """Full production prediction pipeline with farmer tracking."""
+        """Full production prediction pipeline with farmer tracking and language support."""
+        logger.info(
+            "── Prediction Pipeline START (farmer_id=%s, language=%s) ──",
+            farmer_id, language,
+        )
 
-        logger.info("── Prediction Pipeline START (farmer_id=%s) ──", farmer_id)
-
-        # Step 1: Validate
+        # Step 1: Validate image
         self._guardrail_service.validate_image(content_type, len(image_bytes))
         logger.info("Step 1 ✓ Image validated")
 
-        # Step 2: Preprocess
+        # Step 2: Preprocess image
         tensor = preprocess_image(image_bytes)
         logger.info("Step 2 ✓ Preprocessed → %s", tuple(tensor.shape))
 
-        # Step 3: Classify
+        # Step 3: Classify disease
         result = self._classifier.predict(tensor)
-        logger.info("Step 3 ✓ Disease='%s' Confidence=%.4f is_confident=%s is_banana=%s",
-                    result.disease_name, result.confidence,
-                    result.is_confident, result.is_banana_image)
+        logger.info(
+            "Step 3 ✓ Disease='%s' Confidence=%.4f is_confident=%s is_banana=%s",
+            result.disease_name, result.confidence,
+            result.is_confident, result.is_banana_image,
+        )
 
-        # Step 4: Severity
+        # Step 4: Estimate severity
         severity = (
             self._severity_estimator.estimate(result.disease_name, result.confidence)
             if result.is_banana_image else "Unknown"
         )
         logger.info("Step 4 ✓ Severity=%s", severity)
 
-        # Step 5: Advisory (Gemini LLM)
-        advisory = (
-            self._advisory_service.get_advisory(result.disease_name, severity)
-            if result.is_confident
-            else (result.rejection_reason or "Please upload a clearer image.")
-        )
-        logger.info("Step 5 ✓ Advisory generated (%d chars)", len(advisory))
+        # Step 5: Generate advisory (Gemini LLM) in requested language
+        if result.is_confident:
+            advisory = self._advisory_service.get_advisory(
+                disease_name=result.disease_name,
+                severity=severity,
+                language=language,
+            )
+            logger.info(
+                "Step 5 ✓ Advisory generated (%d chars) in language='%s'",
+                len(advisory), language,
+            )
+        else:
+            advisory = result.rejection_reason or "Please upload a clearer image."
+            logger.info("Step 5 ✓ Advisory skipped — low confidence")
 
-        # Step 6: Nearest centre (Google Maps)
+        # Step 6: Find nearest horticulture centre
         nearest_center = self._location_service.get_nearest_centre(latitude, longitude)
         logger.info("Step 6 ✓ Nearest centre: %s", nearest_center)
 
         confidence_pct = f"{result.confidence * 100:.2f}%"
 
-        # Step 7: Persist to DB with farmer_id
+        # Step 7: Persist to DB with farmer_id and language
         await create_prediction(
             db=db,
             farmer_id=farmer_id,
@@ -111,9 +120,10 @@ class PredictionService:
             rejection_reason=result.rejection_reason,
             all_probabilities=result.all_probabilities,
             timestamp=datetime.now(timezone.utc),
-            model_version="1.1.0",
+            model_version="2.0.0",
         )
-
-        logger.info("── Prediction Pipeline COMPLETE → %s | %s | %s ──",
-                    result.disease_name, severity, confidence_pct)
+        logger.info(
+            "── Prediction Pipeline COMPLETE → %s | %s | %s | lang=%s ──",
+            result.disease_name, severity, confidence_pct, language,
+        )
         return response
