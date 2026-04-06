@@ -55,6 +55,79 @@ SUPPORTED_LANGUAGES = {
 DEFAULT_LANGUAGE = "english"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ISO 639 CODE MAP — accepts both ISO codes AND full names from frontend
+# Frontend may send "en", "ta", "hi" etc. — we normalise to full names.
+# ─────────────────────────────────────────────────────────────────────────────
+_ISO_TO_LANGUAGE: dict[str, str] = {
+    "en":  "english",
+    "hi":  "hindi",
+    "ta":  "tamil",
+    "te":  "telugu",
+    "kn":  "kannada",
+    "ml":  "malayalam",
+    "mr":  "marathi",
+    "gu":  "gujarati",
+    "pa":  "punjabi",
+    "bn":  "bengali",
+    "or":  "odia",
+    "od":  "odia",
+    "as":  "assamese",
+    "ur":  "urdu",
+    "sa":  "sanskrit",
+    "kok": "konkani",
+    "mni": "manipuri",
+    "brx": "bodo",
+    "doi": "dogri",
+    "ks":  "kashmiri",
+    "mai": "maithili",
+    "ne":  "nepali",
+    "sat": "santali",
+    "sd":  "sindhi",
+    # BCP-47 / locale-style codes (e.g. "en-IN", "ta-IN")
+    "en-in": "english",
+    "hi-in": "hindi",
+    "ta-in": "tamil",
+    "te-in": "telugu",
+    "kn-in": "kannada",
+    "ml-in": "malayalam",
+    "mr-in": "marathi",
+    "gu-in": "gujarati",
+    "pa-in": "punjabi",
+    "bn-in": "bengali",
+    "or-in": "odia",
+    "as-in": "assamese",
+    "ur-in": "urdu",
+    "ne-in": "nepali",
+}
+
+
+def normalize_language(language: str | None) -> str:
+    """
+    Normalise any language input to a full lowercase language name.
+
+    Accepts:
+      - Full names  : "english", "tamil", "Hindi"
+      - ISO 639-1   : "en", "ta", "hi"
+      - ISO 639-2   : "kok", "mni", "brx"
+      - BCP-47      : "en-IN", "ta-IN"
+      - None / empty: falls back to DEFAULT_LANGUAGE
+
+    Returns a key guaranteed to exist in SUPPORTED_LANGUAGES.
+    """
+    if not language:
+        return DEFAULT_LANGUAGE
+    cleaned = language.lower().strip()
+    # Already a full name?
+    if cleaned in SUPPORTED_LANGUAGES:
+        return cleaned
+    # Try ISO / BCP-47 map
+    mapped = _ISO_TO_LANGUAGE.get(cleaned)
+    if mapped:
+        return mapped
+    # Unrecognised — safe fallback
+    return DEFAULT_LANGUAGE
+
+# ─────────────────────────────────────────────────────────────────────────────
 # REGIONAL LANGUAGE KB — Native advisories (NOT just translations)
 # Written in local farming terminology used by farmers in each region
 # ─────────────────────────────────────────────────────────────────────────────
@@ -332,10 +405,15 @@ ICAR_KB = {
             "• Rabi (Nov–Feb):   Best time for soil solarisation treatment\n"
             "• Summer (Mar–May): Ideal for new planting with resistant varieties\n\n"
             "🛡 PREVENTIVE MEASURES:\n"
-            "• Replant with resistant varieties: Grand Nain, FHIA-01, FHIA-17, Nendran\n"
-            "• Use only certified disease-free TC (tissue culture) suckers\n"
-            "• Disinfect all farm tools with 2% formaldehyde before use\n"
-            "• Practice crop rotation with non-host crops for 2–3 years\n\n"
+            "• Resistant Varieties: Plant only disease-free varieties: Grand Nain, FHIA-01, FHIA-17, Nendran\n"
+            "• Certified Planting Material: Use ONLY tissue culture (TC) suckers from registered nurseries\n"
+            "• Field Sanitation: Remove all banana plants within buffer zone after roguing\n"
+            "• Tool Disinfection: Immerse all pruning tools in 2% formaldehyde for 5 minutes after each plant\n"
+            "• Crop Rotation: Avoid replanting banana for 2–3 years — rotate with non-solanaceae crops\n"
+            "• Water Management: Ensure drainage ditches prevent water accumulation in infected areas\n"
+            "• Soil Treatment: Continue Trichoderma inoculation for at least 1 year post-infection\n"
+            "• Worker Training: Educate workers on disease symptoms and sanitation protocols\n"
+            "• Boundary Fencing: Install physical barriers to prevent movement of soil/material between fields\n\n"
             "📅 MONITORING:\n"
             "• Scout neighbouring plants every 3 days\n"
             "• Report outbreak immediately to nearest Horticulture Department\n"
@@ -359,6 +437,12 @@ ICAR_KB = {
             "🌦 SEASONAL ADVISORY:\n"
             "• Monsoon: Extra vigilance — disease spreads fast in waterlogged soils\n"
             "• Dry season: Apply bioagents every 30 days\n\n"
+            "🛡 PREVENTIVE MEASURES:\n"
+            "• Tool Hygiene: Disinfect pruning equipment with 2% formaldehyde between plants\n"
+            "• Crop Rotation: Plan future crops — avoid banana monoculture in infected field\n"
+            "• Field Monitoring: Scout weekly for yellowing symptoms in adjoining planting blocks\n"
+            "• Remove Infected Plants: Dig out wilting plants completely with soil within 10cm radius\n"
+            "• Worker Protocols: Ensure workers do not move between infected and healthy areas\n\n"
             "📅 MONITORING:\n"
             "• Monitor neighbouring plants every 3 days\n\n"
             "📌 Source: ICAR-NRCB, Trichy."
@@ -376,6 +460,12 @@ ICAR_KB = {
             "• Reduce nitrogen, increase potassium in fertilizer schedule\n\n"
             "🌦 SEASONAL ADVISORY:\n"
             "• Monsoon: Monitor drainage channels weekly\n\n"
+            "🛡 PREVENTIVE MEASURES:\n"
+            "• Field Drainage: Maintain clean drainage channels to prevent waterlogging\n"
+            "• Tool Disinfection: Use 1% bleach solution to disinfect tools regularly\n"
+            "• Resistant Varieties: Consider switching to resistant cultivars in future replanting\n"
+            "• Monitoring Protocol: Scout field boundaries every 7 days\n"
+            "• Disease Map: Maintain record of affected plant locations — track disease spread\n\n"
             "📅 MONITORING:\n"
             "• Scout plantation weekly for yellowing lower leaves\n\n"
             "📌 Source: ICAR-NRCB, Trichy."
@@ -412,9 +502,15 @@ ICAR_KB = {
             "• Rabi/Winter:    Spray every 14 days — moderate risk\n"
             "• Summer:         Spray every 21 days — lower risk period\n\n"
             "🛡 PREVENTIVE MEASURES:\n"
-            "• Improve canopy ventilation by thinning excess suckers\n"
-            "• Maintain adequate spacing between plants (2.5m x 2.5m)\n"
-            "• Use resistant varieties where possible\n\n"
+            "• Canopy Management: Remove excess suckers to improve air circulation and light penetration\n"
+            "• Plant Spacing: Maintain 2.5m x 2.5m spacing — prevents leaf wetness and fungal spread\n"
+            "• Leaf Pruning Protocol: Remove lower 2–3 leaves every 30 days as preventive practice\n"
+            "• Irrigation Method: Never use overhead sprinklers — switch permanently to drip irrigation\n"
+            "• Tool Sanitation: Disinfect pruning shears with 1% Lysol between each plant\n"
+            "• Resistant Varieties: Explore disease-tolerant cultivar options for replanting\n"
+            "• Fungicide Rotation: Change active ingredients every 3 applications to prevent resistance\n"
+            "• Weather Monitoring: Increase spray frequency during extended wet periods\n"
+            "• Leaf Disc Monitoring: Check 3–5 symptomatic leaves weekly for disease progression\n\n"
             "📅 MONITORING:\n"
             "• Check every 7 days for new leaf streaks and spots\n"
             "• Count diseased leaves per bunch — more than 5 = urgent treatment\n\n"
@@ -435,9 +531,12 @@ ICAR_KB = {
             "🌦 SEASONAL ADVISORY:\n"
             "• Monsoon: Increase spray frequency to every 10 days\n"
             "• Dry season: Every 14–21 days\n\n"
-            "📅 MONITORING:\n"
-            "• Inspect every 10 days\n\n"
-            "📌 Source: ICAR-NRCB, Trichy."
+            "🛡 PREVENTIVE MEASURES:\n"
+            "• Canopy Ventilation: Remove 1–2 excess leaves per plant weekly\n"
+            "• Irrigation Switch: Ensure drip irrigation is functional — avoid leaf wetness\n"
+            "• Leaf Inspection: Scout for new streaks every 7 days\n"
+            "• Potassium Boost: Maintain consistent K2O application — strengthens leaf tissue\n"
+            "• Fungicide Timing: Apply preventive spray before monsoon season begins\n\n"
         ),
         "Low": (
             "🔍 DISEASE: Black Sigatoka\n"
@@ -449,6 +548,13 @@ ICAR_KB = {
             "🌱 SOIL & FERTILIZER GUIDANCE:\n"
             "• Ensure balanced NPK fertilisation\n"
             "• Potassium application boosts natural resistance\n\n"
+            "🛡 PREVENTIVE MEASURES:\n"
+            "• Early Detection: Monitor leaf undersides every 5 days for initial streak symptoms\n"
+            "• Sucker Removal: Remove excess suckers to maintain optimal canopy density\n"
+            "• Irrigation Management: Maintain drip irrigation during monsoon — keep leaves dry\n"
+            "• Preventive Spray: Apply copper fungicide as protective spray every 30 days\n"
+            "• Fertiliser Balance: Maintain proper N:K ratio — do not overuse nitrogen\n"
+            "• Baseline Documentation: Photograph leaf status for disease progression tracking\n\n"
             "📅 MONITORING:\n"
             "• Monitor weekly — act immediately if streaks appear\n\n"
             "📌 Source: ICAR-NRCB, Trichy."
@@ -478,6 +584,14 @@ ICAR_KB = {
             "• Kharif: Spray every 14 days — peak disease season\n"
             "• Rabi:   Spray every 21 days\n"
             "• Summer: Preventive spray every 28 days\n\n"
+            "🛡 PREVENTIVE MEASURES:\n"
+            "• Leaf Pruning: Maintain lower leaf removal protocol — prevents fungal nest formation\n"
+            "• Canopy Ventilation: Thin excess lateral leaves to reduce humidity within canopy\n"
+            "• Scheduling Sprays: Alternate between systemic and contact fungicides\n"
+            "• Rainfall Monitoring: Schedule preventive spray after 3+ days of rain\n"
+            "• Nutrient Management: Regular potassium application (K2O) strengthens leaf epidermal cells\n"
+            "• Worker Training: Educate on proper fungicide application technique and PPE usage\n"
+            "• pH Maintenance: Test soil pH quarterly — maintain 6.5–7.0 for optimal plant health\n\n"
             "📅 MONITORING:\n"
             "• Check every 7 days during monsoon\n\n"
             "📌 Source: ICAR-NRCB, Trichy."
@@ -492,6 +606,12 @@ ICAR_KB = {
             "🌱 SOIL & FERTILIZER GUIDANCE:\n"
             "• Potassium @ 150 g K2O/plant\n"
             "• Avoid excess nitrogen\n\n"
+            "🛡 PREVENTIVE MEASURES:\n"
+            "• Regular Leaf Inspection: Scout every 10 days for characteristic yellow blotches\n"
+            "• Fungicide Application: Apply Mancozeb preventively at onset of monsoon season\n"
+            "• Canopy Density: Remove 1–2 older leaves per plant per month\n"
+            "• Soil Health: Ensure good drainage and aeration in root zone\n"
+            "• Resistance Building: Maintain optimal potassium levels to boost plant immunity\n\n"
             "📅 MONITORING:\n"
             "• Check every 10 days\n\n"
             "📌 Source: ICAR-NRCB, Trichy."
@@ -504,6 +624,12 @@ ICAR_KB = {
             "🌱 SOIL & FERTILIZER GUIDANCE:\n"
             "• Maintain adequate drainage — keep leaves dry\n"
             "• Potassium application improves resistance\n\n"
+            "🛡 PREVENTIVE MEASURES:\n"
+            "• Preventive Spray Schedule: Apply copper fungicide every 30 days during monsoon\n"
+            "• Field Hygiene: Remove infected leaves immediately upon detection\n"
+            "• Plant Density: Ensure adequate spacing — remove competing vegetation\n"
+            "• Moisture Management: Avoid evening watering — allows drying time before night\n"
+            "• Record Keeping: Maintain simple log of spray dates and disease observations\n\n"
             "📌 Source: ICAR-NRCB, Trichy."
         ),
     },
@@ -536,9 +662,14 @@ ICAR_KB = {
             "• Rabi:   Moderate risk — inspect every 10 days\n"
             "• Summer: Low risk — maintain pheromone traps\n\n"
             "🛡 PREVENTIVE MEASURES:\n"
-            "• Remove old pseudostems after harvest immediately\n"
-            "• Destroy crop debris — do not leave in field\n"
-            "• Cut pseudostems at ground level after harvest\n\n"
+            "• Trap Installation: Install pheromone traps @ 10/hectare before Kharif season\n"
+            "• Pseudostem Inspection: Examine pseudobase weekly for entry holes and frass\n"
+            "• Crop Residue: Remove all old pseudostems within 5 days of harvest — do not leave\n"
+            "• Field Sanitation: Chop and bury crop residue 6 inches deep to prevent larval emergence\n"
+            "• Pseudostem Treatment: Dip pseudostem cuts in Carbofuran solution after harvest\n"
+            "• Alternate Hosts: Remove wild banana, elephant grass, and bird's nest fern from field margins\n"
+            "• Trap Monitoring: Check traps every 3 days — replace when catches exceed 5 weevils/week\n"
+            "• Regional Coordination: Work with neighbouring farms to prevent pest migration at season end\n\n"
             "📅 MONITORING:\n"
             "• Inspect pheromone traps every 3 days\n"
             "• Count weevils in traps — more than 5/week = urgent treatment\n\n"
@@ -553,6 +684,11 @@ ICAR_KB = {
             "• Pheromone traps @ 5 traps/hectare\n\n"
             "🌱 SOIL & FERTILIZER GUIDANCE:\n"
             "• Potassium @ 150 g K2O/plant — strengthens pseudostem\n\n"
+            "🛡 PREVENTIVE MEASURES:\n"
+            "• Pheromone Trap Maintenance: Check traps every 5 days — clean and recharge monthly\n"
+            "• Pseudostem Inspection: Scout pseudobase for weevil entry holes weekly\n"
+            "• Residue Removal: Remove dead leaves and old pseudostem material from field margins\n"
+            "• Trap Placement: Install traps uniformly throughout field — not just at edges\n\n"
             "📅 MONITORING:\n"
             "• Check traps every 5 days\n\n"
             "📌 Source: ICAR-NRCB, Trichy."
@@ -563,8 +699,11 @@ ICAR_KB = {
             "🌿 BIOLOGICAL CONTROL:\n"
             "• Pheromone traps @ 2–3 traps/hectare — monitoring\n\n"
             "🛡 PREVENTIVE MEASURES:\n"
-            "• Maintain field sanitation\n"
-            "• Remove old pseudostems after harvest\n\n"
+            "• Routine Field Sanitation: Remove dry leaves and plant debris monthly\n"
+            "• Old Pseudostem Removal: Destroy all harvested pseudostems within 7 days\n"
+            "• Trap Maintenance: Check 2–3 traps every 2 weeks for early infestation detection\n"
+            "• Neighbouring Fields: Inform adjacent farmers about preventive measures — coordinate\n"
+            "• Seasonal Coordination: Synchronise harvest timing with neighbouring farms if possible\n\n"
             "📅 MONITORING:\n"
             "• Inspect weekly\n\n"
             "📌 Source: ICAR-NRCB, Trichy."
@@ -789,11 +928,14 @@ def _get_gemini_model():
 
 def _build_gemini_prompt(disease_name: str, severity: str, language: str) -> str:
     lang_display = SUPPORTED_LANGUAGES.get(language, "English")
-    lang_note = (
-        f"\nRespond ENTIRELY in {lang_display}. Keep chemical names in English."
-        if language != "english" else ""
+    lang_instruction = (
+        f"CRITICAL INSTRUCTION: You MUST respond ENTIRELY in {lang_display}. "
+        f"All text, headings, and descriptions must be in {lang_display}. "
+        f"Only keep chemical/scientific names (e.g. Trichoderma, Carbendazim) in English.\n\n"
+        if language != "english"
+        else "Respond in English.\n\n"
     )
-    return f"""You are AgroGuard-AI — an ICAR-NRCB expert advisor for banana diseases.
+    return f"""{lang_instruction}You are AgroGuard-AI — an ICAR-NRCB expert advisor for banana diseases.
 
 Generate a bullet-point advisory ONLY (no paragraphs) for:
 Disease: {disease_name}
@@ -827,7 +969,9 @@ Use this exact format:
 📅 MONITORING:
 • ...
 
-📌 Source: ICAR-NRCB, Trichy.{lang_note}"""
+📌 Source: ICAR-NRCB, Trichy.
+
+IMPORTANT REMINDER: Your entire response MUST be in {lang_display} only."""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -942,6 +1086,94 @@ class AdvisoryService:
         except Exception as exc:
             logger.error("Gemini API error: %s", exc)
             return None
+
+    async def generate_chat_response(
+        self,
+        message: str,
+        language: str = "english",
+        disease_context: str | None = None,
+    ) -> str:
+        """
+        Generate a dynamic farming advisory chat response via Gemini.
+        Used by the POST /chat endpoint for casual farmer questions.
+        disease_context: optional string from the last prediction result
+          e.g. "Disease: Panama Disease | Severity: High | Advisory: <text>"
+        """
+        language = language.lower().strip() if language else "english"
+        lang_display = SUPPORTED_LANGUAGES.get(language, "English")
+        lang_instruction = (
+            f"CRITICAL INSTRUCTION: You MUST respond ENTIRELY in {lang_display}. "
+            f"All text must be in {lang_display}. Only chemical/scientific names stay in English.\n\n"
+            if language != "english"
+            else ""
+        )
+
+        # Build context block so Gemini knows about the farmer's specific scan
+        context_block = ""
+        if disease_context and disease_context.strip():
+            context_block = (
+                f"Context — the farmer has just scanned a banana plant image. "
+                f"The AI detected the following:\n{disease_context.strip()}\n\n"
+                f"The farmer is now asking a follow-up question about this result.\n\n"
+            )
+
+        prompt = (
+            f"{lang_instruction}"
+            f"You are AgroGuard-AI, a friendly expert agricultural advisor specialising in "
+            f"banana farming, crop diseases, and ICAR-NRCB (Trichy) guidelines for Indian farmers.\n\n"
+            f"{context_block}"
+            f"Farmer's question: {message}\n\n"
+            f"Instructions:\n"
+            f"- Give a concise, practical, helpful answer\n"
+            f"- Use bullet points where useful\n"
+            f"- Base advice on ICAR-NRCB guidelines where relevant\n"
+            f"- If context above is provided, answer specifically about the detected disease/condition\n"
+            f"- If the question is a greeting or non-agricultural, respond warmly and offer to help with farming questions\n"
+        )
+        if language != "english":
+            prompt += f"\nIMPORTANT REMINDER: Your entire response MUST be in {lang_display}."
+        try:
+            model = _get_gemini_model()
+            if model is None:
+                return "Advisory service is temporarily unavailable. Please try again later."
+            response = model.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+            )
+            if response and response.text:
+                return response.text.strip()
+            return "I could not generate a response. Please try again."
+        except Exception as exc:
+            logger.error("Gemini chat error: %s", exc)
+            return "Advisory service encountered an error. Please try again."
+
+    async def translate_text(self, text: str, target_language: str) -> str:
+        """
+        Translate arbitrary text into the target Indian language via Gemini.
+        Used by the POST /translate endpoint.
+        """
+        target_language = target_language.lower().strip() if target_language else "english"
+        lang_display = SUPPORTED_LANGUAGES.get(target_language, "English")
+        prompt = (
+            f"CRITICAL INSTRUCTION: Translate the following text EXACTLY into {lang_display}. "
+            f"Return ONLY the translated text — no explanations, no extra commentary, no original text.\n\n"
+            f"Text to translate:\n{text}\n\n"
+            f"IMPORTANT: Output ONLY the {lang_display} translation."
+        )
+        try:
+            model = _get_gemini_model()
+            if model is None:
+                return text  # Return original if Gemini unavailable
+            response = model.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+            )
+            if response and response.text:
+                return response.text.strip()
+            return text
+        except Exception as exc:
+            logger.error("Gemini translate error: %s", exc)
+            return text  # Graceful fallback — return original text
 
 
 def get_supported_languages() -> dict:

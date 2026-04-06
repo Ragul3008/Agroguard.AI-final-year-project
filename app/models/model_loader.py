@@ -87,4 +87,4 @@ class ModelLoader:
 
         net.to(self.device)
         net.eval()
-        return net
+        return net 

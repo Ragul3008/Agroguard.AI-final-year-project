@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.error("✗ Model loading failed: %s", exc)
 
-    logger.info("✓ AgroGuard-AI v1.2.0 is ready → base URL: %s", API_V1)
+    logger.info("✓ AgroGuard-AI is ready → base URL: %s", API_V1)
 
     yield
 

@@ -1,5 +1,5 @@
 """
-services/prediction_service.py - Production prediction orchestrator with JWT farmer tracking.
+services/prediction_service.py - Production prediction orchestrator for AgroGuard-AI.
 """
 from datetime import datetime, timezone
 from typing import Optional
@@ -12,14 +12,18 @@ from app.services.location_service import LocationService
 from app.services.guardrail_service import GuardrailService
 from app.utils.image_preprocessing import preprocess_image
 from app.database.crud import create_prediction
-from app.schemas.response_schema import PredictResponse
+from app.schemas.response_schema import PredictResponse, Nearbycentre
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Default GPS values sent by frontend when no GPS available
+_DEFAULT_LAT = -90.0
+_DEFAULT_LNG = -180.0
+
 
 class PredictionService:
-    """Production prediction service — full 8-step pipeline with farmer tracking."""
+    """Production prediction service — full pipeline with farmer tracking."""
 
     def __init__(self) -> None:
         loader = ModelLoader.get_instance()
@@ -39,91 +43,132 @@ class PredictionService:
         farmer_id:    Optional[int] = None,
         language:     str           = "english",
     ) -> PredictResponse:
-        """Full production prediction pipeline with farmer tracking and language support."""
+        """Full production prediction pipeline."""
         logger.info(
-            "── Prediction Pipeline START (farmer_id=%s, language=%s) ──",
+            "── Prediction Pipeline START (farmer_id=%s language=%s) ──",
             farmer_id, language,
         )
 
-        # Step 1: Validate image
+        # ── Fix GPS: treat default values as no GPS ───────────────────────────
+        if latitude == _DEFAULT_LAT and longitude == _DEFAULT_LNG:
+            logger.info("Default GPS values received — treating as no GPS")
+            latitude  = None
+            longitude = None
+
+        # ── Step 1: Validate file type and size ───────────────────────────────
         self._guardrail_service.validate_image(content_type, len(image_bytes))
-        logger.info("Step 1 ✓ Image validated")
+        logger.info("Step 1 ✓ Image type and size validated")
 
-        # Step 2: Preprocess image
+        # ── Step 2: Validate plant/leaf content ───────────────────────────────
+        # This rejects non-plant images (animals, people, objects etc.)
+        self._guardrail_service.validate_plant_image(image_bytes)
+        logger.info("Step 2 ✓ Plant/leaf content validated")
+
+        # ── Step 3: Preprocess image ──────────────────────────────────────────
         tensor = preprocess_image(image_bytes)
-        logger.info("Step 2 ✓ Preprocessed → %s", tuple(tensor.shape))
+        logger.info("Step 3 ✓ Preprocessed → %s", tuple(tensor.shape))
 
-        # Step 3: Classify disease
+        # ── Step 4: Classify disease ──────────────────────────────────────────
         result = self._classifier.predict(tensor)
         logger.info(
-            "Step 3 ✓ Disease='%s' Confidence=%.4f is_confident=%s is_banana=%s",
+            "Step 4 ✓ Disease='%s' Confidence=%.4f is_confident=%s is_banana=%s",
             result.disease_name, result.confidence,
             result.is_confident, result.is_banana_image,
         )
 
-        # Step 4: Estimate severity
+        # ── Step 5: Estimate severity ─────────────────────────────────────────
         severity = (
             self._severity_estimator.estimate(result.disease_name, result.confidence)
             if result.is_banana_image else "Unknown"
         )
-        logger.info("Step 4 ✓ Severity=%s", severity)
+        logger.info("Step 5 ✓ Severity=%s", severity)
 
-        # Step 5: Generate advisory (Gemini LLM) in requested language
-        if result.is_confident:
+        # ── Step 6: Generate advisory ─────────────────────────────────────────
+        if result.is_confident and result.is_banana_image:
             advisory = self._advisory_service.get_advisory(
-                disease_name=result.disease_name,
-                severity=severity,
-                language=language,
+                disease_name = result.disease_name,
+                severity     = severity,
+                language     = language,
             )
             logger.info(
-                "Step 5 ✓ Advisory generated (%d chars) in language='%s'",
+                "Step 6 ✓ Advisory generated (%d chars) language='%s'",
                 len(advisory), language,
             )
         else:
-            advisory = result.rejection_reason or "Please upload a clearer image."
-            logger.info("Step 5 ✓ Advisory skipped — low confidence")
+            advisory = (
+                result.rejection_reason
+                or "This image does not appear to be a banana plant. "
+                   "Please upload a clear photo of a banana leaf, stem or fruit."
+            )
+            logger.info("Step 6 ✓ Advisory skipped — not confident or not banana")
 
-        # Step 6: Find nearest horticulture centre
-        nearest_center = self._location_service.get_nearest_centre(latitude, longitude)
-        logger.info("Step 6 ✓ Nearest centre: %s", nearest_center)
+        # ── Step 7: Find nearby centres using GPS ─────────────────────────────
+        nearby_centres_data = self._location_service.get_all_nearby_centres(
+            latitude    = latitude,
+            longitude   = longitude,
+            max_results = 5,
+        )
+        logger.info("Step 7 ✓ Found %d nearby centres", len(nearby_centres_data))
+
+        # Convert to schema objects
+        nearby_centres = [
+            Nearbycentre(
+                name     = c.get("name",     ""),
+                address  = c.get("address",  ""),
+                distance = c.get("distance", ""),
+                phone    = c.get("phone",    ""),
+                type     = c.get("type",     ""),
+                summary  = c.get("summary",  ""),
+            )
+            for c in nearby_centres_data
+        ]
+
+        nearest_center = (
+            nearby_centres[0].summary
+            if nearby_centres
+            else "ICAR-NRCB, Trichy — 0431-2616214"
+        )
 
         confidence_pct = f"{result.confidence * 100:.2f}%"
 
-        # Step 7: Persist to DB with farmer_id and language
+        # ── Step 8: Save to database ──────────────────────────────────────────
         await create_prediction(
-            db=db,
-            farmer_id=farmer_id,
-            disease=result.disease_name,
-            confidence=result.confidence,
-            confidence_pct=confidence_pct,
-            severity=severity,
-            advisory=advisory,
-            is_confident=result.is_confident,
-            is_banana_image=result.is_banana_image,
-            rejection_reason=result.rejection_reason,
-            latitude=latitude,
-            longitude=longitude,
-            nearest_center=nearest_center,
+            db               = db,
+            farmer_id        = farmer_id,
+            disease          = result.disease_name,
+            confidence       = result.confidence,
+            confidence_pct   = confidence_pct,
+            severity         = severity,
+            advisory         = advisory,
+            is_confident     = result.is_confident,
+            is_banana_image  = result.is_banana_image,
+            rejection_reason = result.rejection_reason,
+            latitude         = latitude,
+            longitude        = longitude,
+            nearest_center   = nearest_center,
         )
-        logger.info("Step 7 ✓ Saved to database")
+        logger.info("Step 8 ✓ Saved to database")
 
-        # Step 8: Return response
+        # ── Step 9: Return response ───────────────────────────────────────────
         response = PredictResponse(
-            disease=result.disease_name,
-            confidence=result.confidence,
-            confidence_pct=confidence_pct,
-            severity=severity,
-            advisory=advisory,
-            nearest_center=nearest_center,
-            is_confident=result.is_confident,
-            is_banana_image=result.is_banana_image,
-            rejection_reason=result.rejection_reason,
-            all_probabilities=result.all_probabilities,
-            timestamp=datetime.now(timezone.utc),
-            model_version="2.0.0",
+            disease           = result.disease_name,
+            confidence        = result.confidence,
+            confidence_pct    = confidence_pct,
+            severity          = severity,
+            advisory          = advisory,
+            nearest_center    = nearest_center,
+            nearby_centres    = nearby_centres,
+            is_confident      = result.is_confident,
+            is_banana_image   = result.is_banana_image,
+            rejection_reason  = result.rejection_reason,
+            all_probabilities = result.all_probabilities,
+            timestamp         = datetime.now(timezone.utc),
+            model_version     = "3.0.0",
+            language          = language,
         )
+
         logger.info(
-            "── Prediction Pipeline COMPLETE → %s | %s | %s | lang=%s ──",
+            "── Pipeline COMPLETE → %s | %s | %s | lang=%s ──",
             result.disease_name, severity, confidence_pct, language,
         )
         return response
