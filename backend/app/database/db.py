@@ -15,11 +15,18 @@ from app.utils.logger import get_logger
 logger   = get_logger(__name__)
 settings = get_settings()
 
+# Ensure URL uses asyncpg
+db_url = settings.DATABASE_URL
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
 # ---------------------------------------------------------------------------
 # Async engine
 # ---------------------------------------------------------------------------
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    db_url,
     echo=False,          # Set True to log SQL statements during development
     pool_pre_ping=True,
     poolclass=NullPool,  # Recommended for async/serverless workloads
