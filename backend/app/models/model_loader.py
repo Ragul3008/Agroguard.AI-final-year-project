@@ -70,14 +70,24 @@ class ModelLoader:
                 self.model_path,
                 self.device,
             )
-            state = torch.load(self.model_path, map_location=self.device)
+            # Use mmap=True to map weights to disk and avoid large RAM spikes during loading
+            state = torch.load(self.model_path, map_location=self.device, mmap=True)
 
             if isinstance(state, dict) and "model_state_dict" in state:
-                state = state["model_state_dict"]
+                state_dict = state["model_state_dict"]
             elif isinstance(state, dict) and "state_dict" in state:
-                state = state["state_dict"]
+                state_dict = state["state_dict"]
+            else:
+                state_dict = state
 
-            net.load_state_dict(state)
+            net.load_state_dict(state_dict)
+            
+            # Explicitly free memory to survive Render's 512MB RAM limit
+            del state
+            del state_dict
+            import gc
+            gc.collect()
+            
             logger.info("Banana disease model loaded successfully (%d classes).", NUM_CLASSES)
         else:
             logger.warning(
