@@ -72,3 +72,5 @@ httpx
 
 google-auth
 requests
+
+gdown==5.2.0
