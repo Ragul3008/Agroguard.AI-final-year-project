@@ -1,0 +1,74 @@
+annotated-types==0.7.0
+anyio==4.12.1
+async-timeout==5.0.1
+asyncpg==0.29.0
+click==8.3.1
+colorama==0.4.6
+fastapi==0.115.0
+filelock==3.24.3
+fsspec==2026.2.0
+greenlet==3.3.1
+h11==0.16.0
+httptools==0.7.1
+idna==3.11
+intel-openmp==2021.4.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+mkl==2021.4.0
+mpmath==1.3.0
+networkx==3.6.1
+numpy==1.26.4
+pillow==10.4.0
+psycopg2-binary==2.9.9
+pydantic==2.9.1
+pydantic[email]==2.9.1
+pydantic-settings==2.5.2
+pydantic_core==2.23.3
+python-dotenv==1.0.1
+python-multipart==0.0.12
+PyYAML==6.0.3
+SQLAlchemy==2.0.35
+starlette==0.38.6
+sympy==1.14.0
+tbb==2021.13.1
+torch==2.3.1
+torchvision==0.18.1
+typing_extensions==4.15.0
+uvicorn==0.30.6
+watchfiles==1.1.1
+websockets==16.0
+
+# JWT Authentication
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt==4.0.1
+
+# Google OAuth
+authlib==1.3.1
+
+# Database Migrations
+alembic==1.13.1
+
+# Gemini LLM
+google-genai
+
+# Google Maps API calls
+httpx
+
+# Rate Limiting
+slowapi
+
+# Image Processing
+opencv-python-headless==4.9.0.80
+
+# Email (Resend)
+httpx  # Already included above
+
+# OpenAI Whisper
+openai-whisper==20240930
+numpy<2
+authlib
+httpx
+
+google-auth
+requests

@@ -1,0 +1,5 @@
+2026-08-18 12:23:21 | INFO     | app.models.model_loader | Creating ModelLoader singleton (path=saved_models/agroguard_banana_convnext_small.pth)
+2026-08-18 12:23:25 | INFO     | app.models.model_loader | Loading banana model weights from 'saved_models/agroguard_banana_convnext_small.pth' on cuda
+2026-08-18 12:23:26 | INFO     | app.models.model_loader | Banana disease model loaded successfully (7 classes).
+2026-08-18 12:23:33 | INFO     | app.database.db | Database tables created / verified.
+INFO:     127.0.0.1:56068 - "OPTIONS /api/v1/auth/login HTTP/1.1" 400 Bad Request

@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: agroguard-api
+    env: python
+    region: oregon  # or your preferred region
+    plan: starter  # free tier spins down after inactivity; use 'standard' for always-on
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false  # Set in Render dashboard (managed PostgreSQL)
+      - key: SECRET_KEY
+        generateValue: true
+      - key: REFRESH_SECRET_KEY
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEOAPIFY_API_KEY
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: EMAIL_API_KEY
+        sync: false
+      - key: EMAIL_FROM_ADDRESS
+        value: noreply@agroguard.ai
+      - key: ALLOWED_ORIGINS
+        value: "https://agroguard.vercel.app,https://*.vercel.app,http://localhost:5173"
+      - key: MODEL_PATH
+        value: saved_models/agroguard_banana_convnext_v3.pth
+      - key: WHISPER_MODEL_SIZE
+        value: medium
+      - key: DEBUG
+        value: "false"
+
+# NOTE: Render free/starter tiers spin down after 15 minutes of inactivity.
+# First request after spin-down will take 30-60 seconds to cold-start.
+# This is expected behavior, not a bug. For production, upgrade to a paid plan.
