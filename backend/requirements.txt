@@ -64,8 +64,7 @@ opencv-python-headless==4.9.0.80
 # Email (Resend)
 httpx  # Already included above
 
-# OpenAI Whisper
-openai-whisper==20240930
+# OpenAI Whisper (installed separately in build script)
 numpy<2
 authlib
 httpx
