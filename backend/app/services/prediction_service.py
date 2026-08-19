@@ -109,8 +109,7 @@ class PredictionService:
     """Production prediction service — full pipeline with farmer tracking."""
 
     def __init__(self) -> None:
-        loader = ModelLoader.get_instance()
-        self._classifier         = DiseaseClassifier(model_loader=loader)
+        self._classifier         = DiseaseClassifier()
         self._severity_estimator = SeverityEstimator()
         self._advisory_service   = AdvisoryService()
         self._location_service   = LocationService()
