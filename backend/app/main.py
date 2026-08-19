@@ -136,7 +136,7 @@ def create_app() -> FastAPI:
     allowed_origins = settings.allowed_origins_list
     # Separate exact origins from wildcard patterns
     exact_origins = [o for o in allowed_origins if "*" not in o]
-    wildcard_patterns = [o for o in allowed_origins if "*" in o]
+    wildcard_patterns = _expand_wildcard_origins([o for o in allowed_origins if "*" in o])
 
     app.add_middleware(
         CORSMiddleware,

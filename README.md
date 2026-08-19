@@ -212,15 +212,20 @@ To ensure production-grade reliability and lightning-fast loading speeds on low-
 1.  **LocalStorage Memory Footprint Reduction:**
     *   *Problem:* Storing large raw Base64 images (~5MB) was causing the local storage to freeze on the History page.
     *   *Solution:* Integrated HTML5 Canvas image downscaling directly in `Chat.tsx` to compress uploaded photos into a tiny `200px` thumbnail (~10KB) prior to disk insertion, reducing loading time from several seconds to instantaneous.
-2.  **Keystroke Latency Elimination (Typing Lag):**
-    *   *Problem:* Re-renders on each keystroke in the agricultural search/chat inputs were triggering redundant renders of the maps and charts.
-    *   *Solution:* Memoized heavy components (`AudioButton`, `AnalysisCard`, `HorticultureMap`) using `React.memo` and wrapped main triggers inside `useCallback` to prevent unnecessary component updates.
-3.  **Vite Bundler Code-Splitting & Lazy Loading:**
-    *   *Problem:* Heavy analytical components (Recharts, Maps) were causing a massive initial JS download penalty.
-    *   *Solution:* Integrated dynamic imports (`React.lazy`) and React `<Suspense>` loaders into routes. Custom Vite chunks splits the libraries (Recharts, Material-UI, Radix) into smaller, on-demand payloads.
-4.  **Backend Translation Correctness & Dynamic Multilingual Routing:**
-    *   *Problem:* LLM output ignored Tamil/Hindi selection due to English-only prompt constraints.
-    *   *Solution:* Refactored backend prompts in `advisory_service.py` to compile translation rules dynamically, and plumbed API language form keys straight to Gemini prompt templates to guarantee responses in native languages.
-5.  **Graceful Network Interruption Timeouts:**
-    *   *Problem:* Network rate-limiting stalls would leave the UI frozen on "Analyzing...".
-    *   *Solution:* Integrated `AbortController` timeouts globally. Standard chat requests abort after 15 seconds, and model predictions expire after 25 seconds, reporting elegant alerts back to the farmer.
+2.  **AWS Out-of-Memory (OOM) Prevention:**
+    *   *Problem:* Loading a 311MB PyTorch model into a 1GB RAM EC2 instance caused the server to crash instantly.
+    *   *Solution:* Configured 4GB of SWAP virtual memory on the AWS instance, permanently resolving OOM crashes during inference without requiring paid instance upgrades.
+3.  **Vercel CORS & Wildcard Origin Routing Fix:**
+    *   *Problem:* Vercel frontend was being blocked by FastAPI CORS policies due to improper regex mapping of wildcard origins (like `*.vercel.app`).
+    *   *Solution:* Implemented a custom wildcard expansion utility in `main.py` that securely processes subdomains.
+4.  **Mobile-First Camera Integration:**
+    *   *Problem:* Mobile users had to navigate the file system to upload images.
+    *   *Solution:* Added `capture="environment"` directly to the React file input, allowing farmers to instantly open their rear camera for on-field snapshots.
+5.  **Location Services Reliability & UX:**
+    *   *Problem:* UI was misleading users about the location source, and didn't warn if GPS was disabled.
+    *   *Solution:* Added Toast warnings enforcing GPS usage and dynamically updated the UI to reflect whether "GPS location" or "Registered location" is being used to find Horticulture centers.
+
+---
+
+## 🔮 Future Scope
+While the current release (v1.0) is exclusively trained and optimized for **Banana crop diseases**, the backend infrastructure and ML pipelines have been designed modularly. Our immediate future roadmap involves expanding the AI model's training dataset to support **multiple staple crops** natively.

@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useLocation } from "react-router";
 import { useEffect, useState } from "react";
 import { Home, History, Info, User, LogOut } from "lucide-react";
 import { Toaster } from "./ui/sonner";
+import logoImg from "../../assets/logo.png";
 
 export function Root() {
   const navigate = useNavigate();
@@ -41,7 +42,7 @@ export function Root() {
         <header className="bg-green-600 text-white px-4 py-3 flex items-center justify-between shadow-md">
           <div className="flex items-center gap-2">
             <img
-              src="/logo.png"
+              src={logoImg}
               alt="AgroGuard AI"
               className="w-10 h-10 rounded-full object-cover shadow-sm bg-white p-0.5"
             />

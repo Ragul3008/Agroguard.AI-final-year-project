@@ -5,8 +5,10 @@ import {
   Navigation, Phone, X
 } from "lucide-react";
 import { Button } from "./ui/button";
+import { Card, CardContent } from "./ui/card";
 import { Textarea } from "./ui/textarea";
 import { toast } from "sonner";
+import logoImg from "../../assets/logo.png";
 import {
   analyzeImage as analyzeImageAPI,
   sendChatMessage,
@@ -359,6 +361,7 @@ const HorticultureMap = memo(function HorticultureMap({
             },
             async (err) => {
               console.warn("GPS error in modal, calling without coords:", err);
+              toast.warning("Please turn on Location Services (GPS) for accurate results!");
               // GPS denied/timeout — fallback without params
               const data = await getNearbyHorticultureCenters();
               setCenters(parseCenters(data));
@@ -368,6 +371,7 @@ const HorticultureMap = memo(function HorticultureMap({
           );
         } else {
           // No GPS — use fallback
+          toast.warning("Location Services are not supported on your browser.");
           const data = await getNearbyHorticultureCenters();
           setCenters(parseCenters(data));
           setLoading(false);
@@ -392,9 +396,6 @@ const HorticultureMap = memo(function HorticultureMap({
               <MapPin className="w-5 h-5 text-green-600" />
               Nearby Horticulture Centers
             </h3>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Based on your registered location
-            </p>
           </div>
           <button
             onClick={onClose}
@@ -959,7 +960,7 @@ export function Chat() {
       <div className="bg-white border-b border-gray-100 px-4 py-2.5 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2">
           <img
-            src="/logo.png"
+            src={logoImg}
             alt="AgroGuard AI"
             className="w-9 h-9 rounded-full object-cover shadow-sm bg-white p-0.5"
           />
@@ -1137,6 +1138,7 @@ export function Chat() {
             ref={fileInputRef}
             type="file"
             accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
+            capture="environment"
             onChange={handleImageUpload}
             className="hidden"
           />

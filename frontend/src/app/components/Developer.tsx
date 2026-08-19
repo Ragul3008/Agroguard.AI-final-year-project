@@ -1,6 +1,7 @@
 import { Github, Linkedin, Mail, Globe, Code, Heart, Instagram } from "lucide-react";
 import { Button } from "./ui/button";
 import { useState, useEffect } from "react";
+import logoImg from "../../assets/logo.png";
 
 const teamMembers = [
   {
@@ -87,9 +88,9 @@ export function Developer() {
         {/* Profile Section */}
         <div className="bg-white rounded-xl shadow-md p-6 text-center">
           <img
-            src="/logo.png"
+            src={logoImg}
             alt="AgroGuard AI Logo"
-            className="w-24 h-24 rounded-full object-cover shadow-lg mx-auto mb-4 bg-white p-1"
+            className="w-24 h-24 rounded-2xl object-cover shadow-lg mx-auto mb-4 bg-white p-1"
           />
           <h1 className="text-2xl font-bold text-gray-800 mb-1">
             AgroGuard Development Team

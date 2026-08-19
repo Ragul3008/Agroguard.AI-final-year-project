@@ -6,6 +6,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { toast } from "sonner";
+import logoImg from "../../assets/logo.png";
 
 type ForgotPasswordStep = "email" | "otp" | "new-password";
 
@@ -148,7 +149,7 @@ export function ForgotPassword() {
             <ArrowLeft className="w-6 h-6" />
           </button>
           <img
-            src="/logo.png"
+            src={logoImg}
             alt="AgroGuard AI Logo"
             className="w-24 h-24 rounded-2xl object-cover shadow-lg mx-auto mb-4 bg-white p-1"
           />

@@ -1,5 +1,8 @@
 import { Sprout, Target, Zap, Shield, Users, Lightbulb, Github, Linkedin, Instagram, Heart } from "lucide-react";
 import { useState, useEffect } from "react";
+import logoImg from "../../assets/logo.png";
+import ragulImg from "../../assets/ragul.jpg";
+import kabilanImg from "../../assets/kabilan.jpeg";
 
 const teamMembers = [
   {
@@ -18,14 +21,14 @@ const teamMembers = [
   },
   {
     name: "Ragul J",
-    image: "/ragul.jpg",
+    image: ragulImg,
     github: "https://github.com/Ragul3008",
     linkedin: "https://www.linkedin.com/in/ragul-jayakumar/",
     instagram: "https://www.instagram.com/rxgul.cpp?igsh=MW5ybXJxYXJvOHh4eA==",
   },
   {
     name: "Kabilan RK",
-    image: "https://github.com/friend2.png",
+    image: kabilanImg,
     github: "https://github.com/kabilan-ML-Dev",
     linkedin: "https://www.linkedin.com/in/ml-kabilan-r-k/",
     instagram: "https://www.instagram.com/kabilan_r_k?igsh=MWJrZ2lqczlldDJsNw==",
@@ -68,7 +71,7 @@ export function About() {
         {/* Header */}
         <div className="text-center">
           <img
-            src="/logo.png"
+            src={logoImg}
             alt="AgroGuard AI Logo"
             className="w-24 h-24 rounded-2xl object-cover shadow-lg mx-auto mb-4 bg-white p-1"
           />

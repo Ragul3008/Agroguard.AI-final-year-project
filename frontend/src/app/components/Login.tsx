@@ -7,6 +7,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { toast } from "sonner";
+import logoImg from "../../assets/logo.png";
 
 export function Login() {
   const navigate = useNavigate();
@@ -102,9 +103,9 @@ export function Login() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img
-            src="/logo.png"
+            src={logoImg}
             alt="AgroGuard AI Logo"
-            className="w-24 h-24 rounded-2xl object-contain shadow-lg mx-auto mb-4 bg-white p-2"
+            className="w-24 h-24 rounded-2xl object-cover shadow-lg mx-auto mb-4 bg-white p-1"
           />
           <h1 className="text-3xl font-bold text-green-800 mb-2">AgroGuard.ai</h1>
           <p className="text-gray-600">Your AI-Powered Crop Health Assistant</p>

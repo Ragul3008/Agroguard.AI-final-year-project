@@ -3,3 +3,5 @@ venv/
 frontend/node_modules/
 
 backend/saved_models/*.pth
+
+DEPLOYMENT_GUIDE.md
