@@ -27,12 +27,13 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> HealthResponse:
 
     model_loaded = False
     try:
-        ModelLoader.get_instance()
-        model_loaded = True
+        # Check if the singleton exists without forcing it to load
+        if ModelLoader._instance is not None:
+            model_loaded = True
     except Exception as exc:
-        logger.warning("Health check: model not loaded: %s", exc)
+        logger.warning("Health check: model status check failed: %s", exc)
 
-    status = "ok" if db_status == "connected" and model_loaded else "degraded"
+    status = "ok" if db_status == "connected" else "degraded"
     return HealthResponse(
         status=status,
         version="2.0.0",
