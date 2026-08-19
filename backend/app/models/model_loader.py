@@ -11,6 +11,9 @@ import torch
 import torch.nn as nn
 from torchvision import models
 
+# Drastically reduce CPU memory usage
+torch.set_num_threads(1)
+
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

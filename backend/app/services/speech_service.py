@@ -18,7 +18,6 @@ import tempfile
 import threading
 import unicodedata
 from gtts import gTTS
-import whisper
 
 from app.utils.logger import get_logger
 
@@ -131,13 +130,14 @@ _whisper_model = None
 _whisper_lock  = threading.Lock()
 
 
-def get_whisper_model() -> whisper.Whisper:
+def get_whisper_model():
     """
     Load and return the Whisper medium model singleton.
 
     First run: downloads ~1.5 GB model automatically.
     Subsequent runs: loads from local cache instantly.
     """
+    import whisper
     global _whisper_model
     if _whisper_model is None:
         with _whisper_lock:
