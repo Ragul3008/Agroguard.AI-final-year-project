@@ -51,7 +51,8 @@ class PredictionResult:
 class DiseaseClassifier:
     """Production banana disease classifier with confidence filtering."""
 
-    def __init__(self) -> None:
+    def __init__(self, model_loader: ModelLoader) -> None:
+        self._loader               = model_loader
         self._conf_threshold       = settings.MODEL_CONFIDENCE_THRESHOLD
         self._not_banana_threshold = settings.MODEL_NOT_BANANA_THRESHOLD
 
@@ -65,11 +66,10 @@ class DiseaseClassifier:
         Returns:
             PredictionResult with full metadata.
         """
-        loader = ModelLoader.get_instance()
-        tensor = tensor.to(loader.device)
+        tensor = tensor.to(self._loader.device)
 
         with torch.no_grad():
-            logits        = loader.model(tensor)
+            logits        = self._loader.model(tensor)
             probabilities = F.softmax(logits, dim=1)
 
         confidence_tensor, class_idx_tensor = probabilities.max(dim=1)
