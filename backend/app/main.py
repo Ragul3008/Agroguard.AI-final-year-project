@@ -75,14 +75,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("  Continuing without DB.")
 
     try:
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None,
-            lambda: ModelLoader.get_instance(settings.MODEL_PATH),
-        )
-        logger.info("✓ Banana disease model loaded and ready.")
+        # We intentionally DO NOT pre-load the PyTorch model here anymore.
+        # Pre-loading PyTorch + ConvNeXt consumes >500MB and causes an immediate
+        # OOM Kill (Status 137) on Render's 512MB free tier during boot.
+        # It will be lazy-loaded on the first /predict request.
+        logger.info("✓ Banana disease model will be lazy-loaded to save boot memory.")
     except Exception as exc:
-        logger.error("✗ Model loading failed: %s", exc)
+        logger.error("✗ Model pre-loading logic failed: %s", exc)
 
     logger.info("✓ AgroGuard-AI is ready → base URL: %s", API_V1)
 

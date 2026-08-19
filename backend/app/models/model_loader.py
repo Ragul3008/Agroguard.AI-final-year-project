@@ -13,6 +13,7 @@ from torchvision import models
 
 # Drastically reduce CPU memory usage
 torch.set_num_threads(1)
+torch.set_grad_enabled(False)
 
 from app.utils.logger import get_logger
 
