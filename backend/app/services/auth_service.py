@@ -205,7 +205,7 @@ class AuthService:
         await db.commit()
         await db.refresh(farmer)
 
-        logger.info("New farmer registered → id=%d name='%s' phone='%s'",
+        logger.info("New farmer registered â†’ id=%d name='%s' phone='%s'",
                     farmer.id, farmer.name, farmer.phone)
         return farmer
 
@@ -247,7 +247,7 @@ class AuthService:
             raise ValueError("Invalid phone number or password.")
 
         access_token, refresh_token = create_token_pair(farmer.id, farmer.phone)
-        logger.info("Farmer logged in → id=%d phone='%s'", farmer.id, farmer.phone)
+        logger.info("Farmer logged in â†’ id=%d phone='%s'", farmer.id, farmer.phone)
         return farmer, access_token, refresh_token
 
     async def login_with_email(
@@ -277,7 +277,7 @@ class AuthService:
             raise ValueError("Invalid email or password.")
 
         access_token, refresh_token = create_token_pair(farmer.id, farmer.phone)
-        logger.info("Farmer logged in (email) → id=%d email='%s'", farmer.id, farmer.email)
+        logger.info("Farmer logged in (email) â†’ id=%d email='%s'", farmer.id, farmer.email)
         return farmer, access_token, refresh_token
 
     async def google_login(
@@ -313,7 +313,7 @@ class AuthService:
                 farmer.name = name
             await db.commit()
             await db.refresh(farmer)
-            logger.info("Existing Google farmer logged in → id=%d email='%s'", farmer.id, farmer.email)
+            logger.info("Existing Google farmer logged in â†’ id=%d email='%s'", farmer.id, farmer.email)
         else:
             # Check if email exists with password auth - link accounts
             result = await db.execute(
@@ -328,7 +328,7 @@ class AuthService:
                 # Keep existing password_hash for password login option
                 await db.commit()
                 await db.refresh(farmer)
-                logger.info("Google linked to existing farmer → id=%d email='%s'", farmer.id, farmer.email)
+                logger.info("Google linked to existing farmer â†’ id=%d email='%s'", farmer.id, farmer.email)
             else:
                 # Create new Google-only account (no password)
                 farmer = Farmer(
@@ -342,7 +342,7 @@ class AuthService:
                 db.add(farmer)
                 await db.commit()
                 await db.refresh(farmer)
-                logger.info("New Google farmer registered → id=%d email='%s'", farmer.id, farmer.email)
+                logger.info("New Google farmer registered â†’ id=%d email='%s'", farmer.id, farmer.email)
 
         access_token, refresh_token = create_token_pair(farmer.id, farmer.phone or farmer.email)
         return farmer, access_token, refresh_token
@@ -383,7 +383,7 @@ class AuthService:
         await db.commit()
         await db.refresh(farmer)
 
-        logger.info("Password set for farmer → id=%d", farmer_id)
+        logger.info("Password set for farmer â†’ id=%d", farmer_id)
         return farmer
 
     async def refresh_tokens(
@@ -419,7 +419,7 @@ class AuthService:
 
         # Generate new token pair (rotation)
         access_token, new_refresh_token = create_token_pair(farmer.id, farmer.phone or farmer.email)
-        logger.info("Tokens refreshed for farmer → id=%d", farmer_id)
+        logger.info("Tokens refreshed for farmer â†’ id=%d", farmer_id)
         return access_token, new_refresh_token
 
     async def get_farmer_by_id(
@@ -770,5 +770,236 @@ class AuthService:
 
         await db.commit()
         await db.refresh(farmer)
-        logger.info("Farmer profile updated → id=%d", farmer.id)
+        logger.info("Farmer profile updated â†’ id=%d", farmer.id)
         return farmer
+
+    async def request_phone_update(
+
+        self,
+
+        db: AsyncSession,
+
+        farmer_id: int,
+
+        new_phone: str,
+
+    ) -> bool:
+
+        """
+
+        Request an OTP for updating phone number.
+
+        Checks if limit < 3, generates OTP, and sends email.
+
+        """
+
+        from app.database.models import PhoneUpdateOTP
+
+        from app.services.email_service import EmailService
+
+        
+
+        result = await db.execute(
+
+            select(Farmer).where(Farmer.id == farmer_id)
+
+        )
+
+        farmer = result.scalar_one_or_none()
+
+        
+
+        if not farmer:
+
+            raise ValueError("Farmer not found.")
+
+            
+
+        if farmer.phone_update_count >= 3:
+
+            raise ValueError("You have reached the maximum limit of 3 mobile number updates.")
+
+            
+
+        if not farmer.email:
+
+            raise ValueError("An email address must be linked to your account to update your mobile number.")
+
+
+
+        # Delete any previous pending phone updates for this user
+
+        await db.execute(
+
+            delete(PhoneUpdateOTP).where(
+
+                PhoneUpdateOTP.farmer_id == farmer_id
+
+            )
+
+        )
+
+
+
+        otp = self._generate_otp()
+
+        hashed_otp = self._hash_otp(otp)
+
+
+
+        new_otp = PhoneUpdateOTP(
+
+            farmer_id=farmer_id,
+
+            new_phone=new_phone,
+
+            otp_hash=hashed_otp,
+
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10)
+
+        )
+
+        db.add(new_otp)
+
+        await db.commit()
+
+
+
+        # Send email
+
+        EmailService.send_phone_update_otp_email(farmer.email, otp)
+
+        return True
+
+
+
+    async def verify_phone_update(
+
+        self,
+
+        db: AsyncSession,
+
+        farmer_id: int,
+
+        new_phone: str,
+
+        otp: str,
+
+    ) -> Farmer:
+
+        """
+
+        Verifies the OTP and updates the phone number.
+
+        """
+
+        from app.database.models import PhoneUpdateOTP
+
+        
+
+        result = await db.execute(
+
+            select(Farmer).where(Farmer.id == farmer_id)
+
+        )
+
+        farmer = result.scalar_one_or_none()
+
+        
+
+        if not farmer:
+
+            raise ValueError("Farmer not found.")
+
+            
+
+        if farmer.phone_update_count >= 3:
+
+            raise ValueError("You have reached the maximum limit of 3 mobile number updates.")
+
+
+
+        otp_record_res = await db.execute(
+
+            select(PhoneUpdateOTP)
+
+            .where(PhoneUpdateOTP.farmer_id == farmer_id)
+
+            .where(PhoneUpdateOTP.new_phone == new_phone)
+
+            .where(PhoneUpdateOTP.used == False)
+
+            .order_by(PhoneUpdateOTP.created_at.desc())
+
+            .limit(1)
+
+        )
+
+        otp_record = otp_record_res.scalar_one_or_none()
+
+
+
+        if not otp_record:
+
+            raise ValueError("No pending OTP request found for this number.")
+
+
+
+        if otp_record.expires_at < datetime.now(timezone.utc):
+
+            raise ValueError("OTP has expired. Please request a new one.")
+
+
+
+        if otp_record.attempts >= otp_record.max_attempts:
+
+            raise ValueError("Too many invalid attempts. Please request a new OTP.")
+
+
+
+        if not self._verify_otp(otp, otp_record.otp_hash):
+
+            otp_record.attempts += 1
+
+            await db.commit()
+
+            raise ValueError("Invalid OTP.")
+
+
+
+        # OTP is valid, mark as used
+
+        otp_record.used = True
+
+        
+
+        # Check if new phone is already taken by someone else
+
+        existing_phone = await db.execute(
+
+            select(Farmer).where(Farmer.phone == new_phone).where(Farmer.id != farmer_id)
+
+        )
+
+        if existing_phone.scalar_one_or_none():
+
+            raise ValueError(f"Phone number {new_phone} is already registered to another account.")
+
+
+
+        # Update farmer's phone
+
+        farmer.phone = new_phone
+
+        farmer.phone_update_count += 1
+
+        
+
+        await db.commit()
+
+        await db.refresh(farmer)
+        logger.info("Farmer updated phone -> id=%d new_phone='%s'", farmer.id, farmer.phone)
+
+        return farmer
+
+

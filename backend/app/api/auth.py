@@ -79,8 +79,16 @@ class FarmerResponse(BaseModel):
     state:         Optional[str]
     is_active:     bool
     auth_provider: str
+    phone_update_count: int
 
     model_config = {"from_attributes": True, "protected_namespaces": ()}
+
+class RequestPhoneUpdateRequest(BaseModel):
+    new_phone: str = Field(..., min_length=10, max_length=15, example="9876543210")
+
+class VerifyPhoneUpdateRequest(BaseModel):
+    new_phone: str = Field(..., min_length=10, max_length=15, example="9876543210")
+    otp: str = Field(..., min_length=6, max_length=6, example="123456")
 
 
 class AuthResponse(BaseModel):
@@ -504,3 +512,48 @@ async def get_my_predictions(
         }
         for p in predictions
     ]
+
+@router.post(
+    "/request-phone-update",
+    status_code=status.HTTP_200_OK,
+    summary="Request an OTP to update phone number",
+)
+@limiter.limit("5/minute")
+async def request_phone_update(
+    request: Request,
+    body: RequestPhoneUpdateRequest,
+    farmer: Farmer = Depends(get_current_farmer),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Request OTP for phone update. Sends an email to the farmer."""
+    try:
+        await _auth_service.request_phone_update(db, farmer.id, body.new_phone)
+        return {"message": "OTP has been sent to your registered email address."}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.error("Request phone update error: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to request phone update. Please try again.")
+
+@router.post(
+    "/verify-phone-update",
+    response_model=FarmerResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Verify OTP and update phone number",
+)
+@limiter.limit("10/minute")
+async def verify_phone_update(
+    request: Request,
+    body: VerifyPhoneUpdateRequest,
+    farmer: Farmer = Depends(get_current_farmer),
+    db: AsyncSession = Depends(get_db),
+) -> FarmerResponse:
+    """Verify OTP and update phone number if valid."""
+    try:
+        updated_farmer = await _auth_service.verify_phone_update(db, farmer.id, body.new_phone, body.otp)
+        return FarmerResponse.model_validate(updated_farmer)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.error("Verify phone update error: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to verify OTP. Please try again.")
