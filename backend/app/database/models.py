@@ -38,6 +38,7 @@ class Farmer(Base):
     district     = Column(String(255), nullable=True)
     state        = Column(String(255), nullable=True, default="Tamil Nadu")
     is_active    = Column(Boolean,     nullable=False, default=True)
+    phone_update_count = Column(Integer, nullable=False, default=0)
     created_at   = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -74,6 +75,32 @@ class PasswordReset(Base):
 
     def __repr__(self) -> str:
         return f"<PasswordReset id={self.id} email='{self.email}' used={self.used}>"
+
+
+class PhoneUpdateOTP(Base):
+    """
+    Phone number update OTP storage.
+    Stores hashed OTP with expiry and attempt tracking.
+    """
+
+    __tablename__ = "phone_update_otps"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    farmer_id    = Column(Integer, ForeignKey("farmers.id"), nullable=False, index=True)
+    new_phone    = Column(String(20), nullable=False)
+    otp_hash     = Column(String(255), nullable=False)  # bcrypt hash of the 6-digit OTP
+    attempts     = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=5)
+    expires_at   = Column(DateTime(timezone=True), nullable=False, index=True)
+    used         = Column(Boolean, nullable=False, default=False)
+    created_at   = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    def __repr__(self) -> str:
+        return f"<PhoneUpdateOTP id={self.id} farmer_id={self.farmer_id} used={self.used}>"
 
 
 class Prediction(Base):

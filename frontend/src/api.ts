@@ -91,6 +91,36 @@ export const updateProfile = async (data: { name?: string, village?: string, dis
   return response.json();
 };
 
+export const requestPhoneUpdate = async (newPhone: string) => {
+  const token = localStorage.getItem("agroguard_token");
+  const response = await fetch(`${BASE_URL}/auth/request-phone-update`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`
+    },
+    body: JSON.stringify({ new_phone: newPhone })
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to request phone update");
+  return data;
+};
+
+export const verifyPhoneUpdate = async (newPhone: string, otp: string) => {
+  const token = localStorage.getItem("agroguard_token");
+  const response = await fetch(`${BASE_URL}/auth/verify-phone-update`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`
+    },
+    body: JSON.stringify({ new_phone: newPhone, otp })
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to verify phone update");
+  return data;
+};
+
 // ─── ANALYZE IMAGE ───────────────────────────────
 export const analyzeImage = async (imageBase64: string, language: string = "en") => {
   const token = localStorage.getItem("agroguard_token");

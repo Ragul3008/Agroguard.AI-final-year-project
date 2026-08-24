@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { getMyProfile, updateProfile } from "../../api.ts";
-import { User, Phone, Mail, MapPin, Building, Map, Save, Loader2 } from "lucide-react";
+import { User, Phone, Mail, MapPin, Building, Map, Save, Loader2, Edit2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
+import { requestPhoneUpdate, verifyPhoneUpdate } from "../../api.ts";
 
 export function Profile() {
   const [loading, setLoading] = useState(true);
@@ -17,7 +19,14 @@ export function Profile() {
     district: "",
     state: "",
     auth_provider: "",
+    phone_update_count: 0,
   });
+
+  const [phoneModalOpen, setPhoneModalOpen] = useState(false);
+  const [newPhone, setNewPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [phoneUpdating, setPhoneUpdating] = useState(false);
 
   useEffect(() => {
     fetchProfile();
@@ -35,6 +44,7 @@ export function Profile() {
         district: data.district || "",
         state: data.state || "",
         auth_provider: data.auth_provider || "",
+        phone_update_count: data.phone_update_count || 0,
       });
     } catch (error) {
       console.error(error);
@@ -71,6 +81,44 @@ export function Profile() {
       toast.error("Failed to update profile.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRequestPhoneUpdate = async () => {
+    if (newPhone.length < 10) {
+      toast.error("Please enter a valid phone number");
+      return;
+    }
+    try {
+      setPhoneUpdating(true);
+      await requestPhoneUpdate(newPhone);
+      toast.success("OTP sent to your email!");
+      setOtpSent(true);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to request phone update");
+    } finally {
+      setPhoneUpdating(false);
+    }
+  };
+
+  const handleVerifyPhoneUpdate = async () => {
+    if (otp.length !== 6) {
+      toast.error("OTP must be 6 digits");
+      return;
+    }
+    try {
+      setPhoneUpdating(true);
+      await verifyPhoneUpdate(newPhone, otp);
+      toast.success("Phone number updated successfully!");
+      setPhoneModalOpen(false);
+      setOtpSent(false);
+      setNewPhone("");
+      setOtp("");
+      fetchProfile(); // Refresh profile to get updated count and phone
+    } catch (error: any) {
+      toast.error(error.message || "Failed to verify OTP");
+    } finally {
+      setPhoneUpdating(false);
     }
   };
 
@@ -143,16 +191,39 @@ export function Profile() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone" className="text-gray-700 flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-gray-400" /> Phone Number
-                </Label>
-                <Input
-                  id="phone"
-                  value={profile.phone || "Not provided"}
-                  readOnly
-                  className="bg-gray-50 text-gray-500 cursor-not-allowed rounded-xl border-gray-200"
-                />
-                <p className="text-xs text-gray-400">Phone & Email cannot be edited directly.</p>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="phone" className="text-gray-700 flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-gray-400" /> Phone Number
+                  </Label>
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-md">
+                    Changed {profile.phone_update_count}/3 times
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    id="phone"
+                    value={profile.phone || "Not provided"}
+                    readOnly
+                    className="bg-gray-50 text-gray-500 cursor-not-allowed rounded-xl border-gray-200"
+                  />
+                  {profile.phone_update_count < 3 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="rounded-xl flex-shrink-0"
+                      onClick={() => {
+                        setOtpSent(false);
+                        setNewPhone("");
+                        setOtp("");
+                        setPhoneModalOpen(true);
+                      }}
+                    >
+                      <Edit2 className="w-4 h-4 text-gray-500" />
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400">Email cannot be edited directly.</p>
               </div>
             </div>
           </div>
@@ -221,6 +292,64 @@ export function Profile() {
 
         </form>
       </div>
+
+      {/* Phone Update Modal */}
+      <Dialog open={phoneModalOpen} onOpenChange={setPhoneModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Update Mobile Number</DialogTitle>
+            <DialogDescription>
+              You can change your mobile number a maximum of 3 times. You have used {profile.phone_update_count}/3 changes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {!otpSent ? (
+              <div className="space-y-2">
+                <Label htmlFor="new-phone">New Phone Number</Label>
+                <Input
+                  id="new-phone"
+                  placeholder="e.g. 9876543210"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                />
+                <p className="text-xs text-gray-500">
+                  An OTP will be sent to your registered email address ({profile.email}) to verify this change.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="otp">Enter 6-digit OTP</Label>
+                <Input
+                  id="otp"
+                  placeholder="123456"
+                  maxLength={6}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                />
+                <p className="text-xs text-gray-500">
+                  Please check your email for the OTP. It will expire in 10 minutes.
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPhoneModalOpen(false)}>
+              Cancel
+            </Button>
+            {!otpSent ? (
+              <Button onClick={handleRequestPhoneUpdate} disabled={phoneUpdating || !newPhone}>
+                {phoneUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Send OTP
+              </Button>
+            ) : (
+              <Button onClick={handleVerifyPhoneUpdate} disabled={phoneUpdating || otp.length !== 6}>
+                {phoneUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Verify & Update
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
